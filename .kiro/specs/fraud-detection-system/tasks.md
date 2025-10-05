@@ -39,7 +39,11 @@
     - _Requirements: 1.1_
 
 - [ ] 3. Develop data preprocessing and feature engineering
-  - [ ] 3.1 Create DataCleaner class for data quality issues
+  - [x] 3.1 Create DataCleaner class for data quality issues
+
+
+
+
     - Handle missing values with appropriate imputation strategies
     - Implement data type conversions and validation
     - Add outlier detection and treatment methods

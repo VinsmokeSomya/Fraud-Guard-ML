@@ -7,5 +7,6 @@ fraud detection datasets.
 
 from .data_loader import DataLoader
 from .data_explorer import DataExplorer
+from .data_cleaner import DataCleaner
 
-__all__ = ['DataLoader', 'DataExplorer']
+__all__ = ['DataLoader', 'DataExplorer', 'DataCleaner']
