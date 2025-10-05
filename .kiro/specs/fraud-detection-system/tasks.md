@@ -13,7 +13,11 @@
   - _Requirements: 1.1, 2.1_
 
 - [ ] 2. Implement data loading and exploration functionality
-  - [ ] 2.1 Create DataLoader class to read CSV files efficiently
+  - [x] 2.1 Create DataLoader class to read CSV files efficiently
+
+
+
+
     - Implement chunked reading for large datasets
     - Add data validation and schema checking
     - Handle file path resolution and error cases

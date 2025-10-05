@@ -193,11 +193,11 @@ Thumbs.db
 *.csv
 *.json
 *.parquet
-data/
-datasets/
-models/
-checkpoints/
-logs/
+!data/
+!datasets/
+!models/
+!checkpoints/
+!logs/
 wandb/
 mlruns/
 .mlflow/
