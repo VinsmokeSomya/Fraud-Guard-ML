@@ -213,3 +213,4 @@ mlruns/
 *.temp
 temp/
 tmp/
+.kiro/
