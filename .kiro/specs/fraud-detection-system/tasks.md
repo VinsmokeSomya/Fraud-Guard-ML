@@ -82,7 +82,12 @@
     - _Requirements: 2.1, 2.3_
 
 - [ ] 4. Build machine learning model classes and training pipeline
-  - [ ] 4.1 Create base FraudModel interface and abstract class
+  - [x] 4.1 Create base FraudModel interface and abstract class
+
+
+
+
+
     - Define common methods (train, predict, predict_proba, get_feature_importance)
     - Implement model serialization and loading functionality
     - Add model metadata tracking (training time, parameters)
