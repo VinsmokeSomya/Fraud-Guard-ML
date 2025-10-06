@@ -126,7 +126,10 @@
     - Implement SHAP values for model interpretability
     - _Requirements: 3.1_
   
-  - [-] 4.5 Write unit tests for model classes
+  - [x] 4.5 Write unit tests for model classes
+
+
+
 
 
 
