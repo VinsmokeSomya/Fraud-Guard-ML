@@ -9,5 +9,6 @@ from .base_model import FraudModel, FraudModelInterface
 from .logistic_regression_model import LogisticRegressionModel
 from .random_forest_model import RandomForestModel
 from .xgboost_model import XGBoostModel
+from .model_evaluator import ModelEvaluator
 
-__all__ = ['FraudModel', 'FraudModelInterface', 'LogisticRegressionModel', 'RandomForestModel', 'XGBoostModel']
+__all__ = ['FraudModel', 'FraudModelInterface', 'LogisticRegressionModel', 'RandomForestModel', 'XGBoostModel', 'ModelEvaluator']

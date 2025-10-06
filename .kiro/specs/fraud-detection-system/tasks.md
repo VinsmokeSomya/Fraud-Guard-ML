@@ -138,7 +138,11 @@
     - _Requirements: 3.1_
 
 - [ ] 5. Create model evaluation and comparison system
-  - [ ] 5.1 Build ModelEvaluator class for performance metrics
+  - [x] 5.1 Build ModelEvaluator class for performance metrics
+
+
+
+
     - Calculate accuracy, precision, recall, F1-score, and AUC-ROC
     - Generate confusion matrices and classification reports
     - Implement cross-validation with stratified folds
