@@ -8,5 +8,6 @@ fraud detection datasets.
 from .data_loader import DataLoader
 from .data_explorer import DataExplorer
 from .data_cleaner import DataCleaner
+from .feature_engineering import FeatureEngineering
 
-__all__ = ['DataLoader', 'DataExplorer', 'DataCleaner']
+__all__ = ['DataLoader', 'DataExplorer', 'DataCleaner', 'FeatureEngineering']

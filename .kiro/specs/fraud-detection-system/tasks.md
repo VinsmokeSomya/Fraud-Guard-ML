@@ -49,7 +49,12 @@
     - Add outlier detection and treatment methods
     - _Requirements: 2.1_
   
-  - [ ] 3.2 Build FeatureEngineering class for derived features
+  - [x] 3.2 Build FeatureEngineering class for derived features
+
+
+
+
+
     - Calculate balance changes (newbalance - oldbalance)
     - Create amount-to-balance ratios and merchant flags
     - Implement time-based features (hour, day) from step column
