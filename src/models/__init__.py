@@ -6,5 +6,6 @@ for various machine learning algorithms used in fraud detection.
 """
 
 from .base_model import FraudModel, FraudModelInterface
+from .logistic_regression_model import LogisticRegressionModel
 
-__all__ = ['FraudModel', 'FraudModelInterface']
+__all__ = ['FraudModel', 'FraudModelInterface', 'LogisticRegressionModel']

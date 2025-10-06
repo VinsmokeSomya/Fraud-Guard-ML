@@ -93,7 +93,12 @@
     - Add model metadata tracking (training time, parameters)
     - _Requirements: 3.1_
   
-  - [ ] 4.2 Implement LogisticRegressionModel class
+  - [x] 4.2 Implement LogisticRegressionModel class
+
+
+
+
+
     - Create scikit-learn LogisticRegression wrapper
     - Add hyperparameter tuning with GridSearchCV
     - Implement class balancing with class_weight parameter
