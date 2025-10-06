@@ -104,7 +104,12 @@
     - Implement class balancing with class_weight parameter
     - _Requirements: 3.1, 3.2_
   
-  - [ ] 4.3 Implement RandomForestModel class
+  - [x] 4.3 Implement RandomForestModel class
+
+
+
+
+
     - Create scikit-learn RandomForestClassifier wrapper
     - Add feature importance extraction and ranking
     - Implement out-of-bag scoring for validation
@@ -116,7 +121,8 @@
     - Implement SHAP values for model interpretability
     - _Requirements: 3.1_
   
-  - [ ]* 4.5 Write unit tests for model classes
+  - [ ] 4.5 Write unit tests for model classes
+
     - Test model training and prediction interfaces
     - Validate feature importance calculations
     - _Requirements: 3.1_
