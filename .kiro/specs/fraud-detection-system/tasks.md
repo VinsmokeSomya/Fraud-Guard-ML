@@ -126,7 +126,9 @@
     - Implement SHAP values for model interpretability
     - _Requirements: 3.1_
   
-  - [ ] 4.5 Write unit tests for model classes
+  - [-] 4.5 Write unit tests for model classes
+
+
 
     - Test model training and prediction interfaces
     - Validate feature importance calculations
