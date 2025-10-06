@@ -9,5 +9,7 @@ from .data_loader import DataLoader
 from .data_explorer import DataExplorer
 from .data_cleaner import DataCleaner
 from .feature_engineering import FeatureEngineering
+from .data_encoder import DataEncoder, StandardScalerWrapper, MinMaxScalerWrapper
 
-__all__ = ['DataLoader', 'DataExplorer', 'DataCleaner', 'FeatureEngineering']
+__all__ = ['DataLoader', 'DataExplorer', 'DataCleaner', 'FeatureEngineering', 
+           'DataEncoder', 'StandardScalerWrapper', 'MinMaxScalerWrapper']

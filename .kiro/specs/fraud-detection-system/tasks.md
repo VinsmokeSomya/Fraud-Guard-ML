@@ -61,13 +61,18 @@
     - Add large transfer flags based on business rules
     - _Requirements: 2.3, 5.3_
   
-  - [ ] 3.3 Implement data encoding and scaling utilities
+  - [x] 3.3 Implement data encoding and scaling utilities
+
+
+
+
     - Encode categorical variables (transaction types, customer names)
     - Create StandardScaler and MinMaxScaler wrappers
     - Implement stratified train-test splitting functionality
     - _Requirements: 2.2, 2.4, 2.5_
   
-  - [ ]* 3.4 Write unit tests for preprocessing components
+  - [ ] 3.4 Write unit tests for preprocessing components
+
     - Test feature engineering calculations with known inputs
     - Validate encoding and scaling transformations
     - _Requirements: 2.1, 2.3_
