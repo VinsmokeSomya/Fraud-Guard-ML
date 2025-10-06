@@ -71,7 +71,11 @@
     - Implement stratified train-test splitting functionality
     - _Requirements: 2.2, 2.4, 2.5_
   
-  - [ ] 3.4 Write unit tests for preprocessing components
+  - [x] 3.4 Write unit tests for preprocessing components
+
+
+
+
 
     - Test feature engineering calculations with known inputs
     - Validate encoding and scaling transformations
