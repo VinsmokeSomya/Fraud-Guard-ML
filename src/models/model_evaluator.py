@@ -8,11 +8,14 @@ performance metrics calculation, cross-validation, and model comparison.
 from typing import Dict, Any, List, Tuple, Optional, Union
 import pandas as pd
 import numpy as np
+from datetime import datetime
 from sklearn.metrics import (
     accuracy_score, precision_score, recall_score, f1_score, roc_auc_score,
     confusion_matrix, classification_report, roc_curve, precision_recall_curve
 )
 from sklearn.model_selection import StratifiedKFold, cross_val_score, cross_validate
+from scipy import stats
+from scipy.stats import ttest_rel, wilcoxon, mannwhitneyu
 import warnings
 from .base_model import FraudModelInterface
 
@@ -348,3 +351,446 @@ class ModelEvaluator:
     def clear_history(self) -> None:
         """Clear the evaluation history."""
         self.evaluation_history.clear()
+    
+    def create_comparison_table(self, 
+                              model_results: List[Dict[str, Any]],
+                              metrics: Optional[List[str]] = None) -> pd.DataFrame:
+        """
+        Create a comprehensive model performance comparison table.
+        
+        Args:
+            model_results: List of evaluation results from evaluate_model()
+            metrics: List of metrics to include in comparison
+            
+        Returns:
+            DataFrame with model comparison data
+        """
+        if not model_results:
+            raise ValueError("No model results provided for comparison")
+        
+        if metrics is None:
+            metrics = ['accuracy', 'precision', 'recall', 'f1_score', 'auc_roc', 
+                      'specificity', 'false_positive_rate', 'false_negative_rate']
+        
+        # Create comparison data
+        comparison_data = []
+        for result in model_results:
+            model_data = {'model_name': result.get('model_name', 'Unknown')}
+            
+            # Add requested metrics
+            for metric in metrics:
+                model_data[metric] = result.get(metric)
+            
+            # Add additional useful information
+            model_data.update({
+                'test_samples': result.get('test_samples'),
+                'positive_samples': result.get('positive_samples'),
+                'negative_samples': result.get('negative_samples'),
+                'true_positives': result.get('true_positives'),
+                'true_negatives': result.get('true_negatives'),
+                'false_positives': result.get('false_positives'),
+                'false_negatives': result.get('false_negatives')
+            })
+            
+            comparison_data.append(model_data)
+        
+        # Convert to DataFrame
+        comparison_df = pd.DataFrame(comparison_data)
+        
+        # Add ranking columns for key metrics
+        ranking_metrics = ['f1_score', 'auc_roc', 'precision', 'recall']
+        for metric in ranking_metrics:
+            if metric in comparison_df.columns:
+                comparison_df[f'{metric}_rank'] = comparison_df[metric].rank(
+                    ascending=False, method='min', na_option='bottom'
+                )
+        
+        return comparison_df
+    
+    def statistical_significance_test(self,
+                                    model1_cv_scores: List[float],
+                                    model2_cv_scores: List[float],
+                                    test_type: str = 'paired_ttest',
+                                    alpha: float = 0.05) -> Dict[str, Any]:
+        """
+        Perform statistical significance testing between two models.
+        
+        Args:
+            model1_cv_scores: Cross-validation scores for model 1
+            model2_cv_scores: Cross-validation scores for model 2
+            test_type: Type of statistical test ('paired_ttest', 'wilcoxon', 'mannwhitney')
+            alpha: Significance level
+            
+        Returns:
+            Dictionary containing test results
+        """
+        if len(model1_cv_scores) != len(model2_cv_scores):
+            if test_type in ['paired_ttest', 'wilcoxon']:
+                raise ValueError("Paired tests require equal number of scores")
+        
+        # Convert to numpy arrays
+        scores1 = np.array(model1_cv_scores)
+        scores2 = np.array(model2_cv_scores)
+        
+        # Remove any NaN values
+        valid_mask1 = ~np.isnan(scores1)
+        valid_mask2 = ~np.isnan(scores2)
+        
+        if test_type in ['paired_ttest', 'wilcoxon']:
+            valid_mask = valid_mask1 & valid_mask2
+            scores1 = scores1[valid_mask]
+            scores2 = scores2[valid_mask]
+        else:
+            scores1 = scores1[valid_mask1]
+            scores2 = scores2[valid_mask2]
+        
+        if len(scores1) < 2 or len(scores2) < 2:
+            return {
+                'test_type': test_type,
+                'statistic': None,
+                'p_value': None,
+                'significant': None,
+                'error': 'Insufficient valid scores for testing'
+            }
+        
+        # Perform the appropriate statistical test
+        try:
+            if test_type == 'paired_ttest':
+                statistic, p_value = ttest_rel(scores1, scores2)
+            elif test_type == 'wilcoxon':
+                statistic, p_value = wilcoxon(scores1, scores2)
+            elif test_type == 'mannwhitney':
+                statistic, p_value = mannwhitneyu(scores1, scores2, alternative='two-sided')
+            else:
+                raise ValueError(f"Unknown test type: {test_type}")
+            
+            # Determine significance
+            significant = p_value < alpha
+            
+            # Calculate effect size (Cohen's d for t-test)
+            effect_size = None
+            if test_type == 'paired_ttest':
+                diff = scores1 - scores2
+                effect_size = np.mean(diff) / np.std(diff, ddof=1) if np.std(diff, ddof=1) > 0 else 0
+            
+            return {
+                'test_type': test_type,
+                'statistic': float(statistic),
+                'p_value': float(p_value),
+                'significant': significant,
+                'alpha': alpha,
+                'effect_size': effect_size,
+                'mean_diff': float(np.mean(scores1) - np.mean(scores2)),
+                'model1_mean': float(np.mean(scores1)),
+                'model2_mean': float(np.mean(scores2)),
+                'model1_std': float(np.std(scores1, ddof=1)),
+                'model2_std': float(np.std(scores2, ddof=1)),
+                'sample_size': len(scores1)
+            }
+            
+        except Exception as e:
+            return {
+                'test_type': test_type,
+                'statistic': None,
+                'p_value': None,
+                'significant': None,
+                'error': str(e)
+            }
+    
+    def compare_models_with_significance(self,
+                                       cv_results: List[Dict[str, Any]],
+                                       metric: str = 'f1_score',
+                                       test_type: str = 'paired_ttest',
+                                       alpha: float = 0.05) -> Dict[str, Any]:
+        """
+        Compare multiple models with statistical significance testing.
+        
+        Args:
+            cv_results: List of cross-validation results from cross_validate_model()
+            metric: Metric to use for comparison
+            test_type: Statistical test type
+            alpha: Significance level
+            
+        Returns:
+            Dictionary containing pairwise comparison results
+        """
+        if len(cv_results) < 2:
+            raise ValueError("Need at least 2 models for comparison")
+        
+        # Extract model names and scores
+        model_names = []
+        model_scores = []
+        
+        for cv_result in cv_results:
+            # Try to extract model name from fold details or use index
+            if cv_result.get('fold_details'):
+                model_name = cv_result['fold_details'][0].get('metrics', {}).get('model_name', f"Model_{len(model_names)}")
+            else:
+                model_name = f"Model_{len(model_names)}"
+            
+            model_names.append(model_name)
+            
+            # Extract scores for the specified metric
+            scores_key = f'{metric}_scores'
+            if scores_key in cv_result.get('cv_summary', {}):
+                scores = cv_result['cv_summary'][scores_key]
+                model_scores.append(scores)
+            else:
+                # Try to extract from fold details
+                scores = []
+                for fold in cv_result.get('fold_details', []):
+                    if metric in fold.get('metrics', {}):
+                        scores.append(fold['metrics'][metric])
+                model_scores.append(scores)
+        
+        # Perform pairwise comparisons
+        pairwise_results = {}
+        comparison_matrix = pd.DataFrame(index=model_names, columns=model_names)
+        
+        for i, (name1, scores1) in enumerate(zip(model_names, model_scores)):
+            for j, (name2, scores2) in enumerate(zip(model_names, model_scores)):
+                if i != j:
+                    comparison_key = f"{name1}_vs_{name2}"
+                    test_result = self.statistical_significance_test(
+                        scores1, scores2, test_type, alpha
+                    )
+                    pairwise_results[comparison_key] = test_result
+                    
+                    # Fill comparison matrix with p-values
+                    comparison_matrix.loc[name1, name2] = test_result.get('p_value')
+                else:
+                    comparison_matrix.loc[name1, name2] = 1.0  # Same model
+        
+        # Create summary statistics
+        summary_stats = []
+        for name, scores in zip(model_names, model_scores):
+            if scores:
+                summary_stats.append({
+                    'model_name': name,
+                    f'{metric}_mean': np.mean(scores),
+                    f'{metric}_std': np.std(scores, ddof=1),
+                    f'{metric}_min': np.min(scores),
+                    f'{metric}_max': np.max(scores),
+                    'cv_folds': len(scores)
+                })
+        
+        return {
+            'pairwise_comparisons': pairwise_results,
+            'comparison_matrix': comparison_matrix.astype(float),
+            'summary_statistics': summary_stats,
+            'test_parameters': {
+                'metric': metric,
+                'test_type': test_type,
+                'alpha': alpha
+            }
+        }
+    
+    def select_best_model(self,
+                         model_results: List[Dict[str, Any]],
+                         business_metrics: Optional[Dict[str, float]] = None,
+                         primary_metric: str = 'f1_score',
+                         min_thresholds: Optional[Dict[str, float]] = None) -> Dict[str, Any]:
+        """
+        Select the best model based on business metrics and constraints.
+        
+        Args:
+            model_results: List of evaluation results from evaluate_model()
+            business_metrics: Weights for different metrics (e.g., {'precision': 0.4, 'recall': 0.6})
+            primary_metric: Primary metric for ranking if business_metrics not provided
+            min_thresholds: Minimum acceptable values for metrics
+            
+        Returns:
+            Dictionary containing best model selection results
+        """
+        if not model_results:
+            raise ValueError("No model results provided")
+        
+        # Default business metrics for fraud detection
+        if business_metrics is None:
+            business_metrics = {
+                'precision': 0.3,  # Important to minimize false positives
+                'recall': 0.4,     # Critical to catch fraud
+                'f1_score': 0.2,   # Balance between precision and recall
+                'auc_roc': 0.1     # Overall discriminative ability
+            }
+        
+        # Default minimum thresholds for fraud detection
+        if min_thresholds is None:
+            min_thresholds = {
+                'precision': 0.5,  # At least 50% precision
+                'recall': 0.6,     # At least 60% recall
+                'f1_score': 0.5    # At least 50% F1-score
+            }
+        
+        # Filter models that meet minimum thresholds
+        qualified_models = []
+        disqualified_models = []
+        
+        for result in model_results:
+            model_name = result.get('model_name', 'Unknown')
+            meets_thresholds = True
+            failed_thresholds = []
+            
+            for metric, threshold in min_thresholds.items():
+                model_value = result.get(metric)
+                if model_value is None or model_value < threshold:
+                    meets_thresholds = False
+                    failed_thresholds.append(f"{metric}: {model_value} < {threshold}")
+            
+            if meets_thresholds:
+                qualified_models.append(result)
+            else:
+                disqualified_models.append({
+                    'model_name': model_name,
+                    'failed_thresholds': failed_thresholds
+                })
+        
+        if not qualified_models:
+            return {
+                'best_model': None,
+                'selection_reason': 'No models met minimum thresholds',
+                'disqualified_models': disqualified_models,
+                'business_metrics': business_metrics,
+                'min_thresholds': min_thresholds
+            }
+        
+        # Calculate business scores for qualified models
+        model_scores = []
+        for result in qualified_models:
+            business_score = 0.0
+            metric_contributions = {}
+            
+            for metric, weight in business_metrics.items():
+                value = result.get(metric, 0)
+                contribution = value * weight
+                business_score += contribution
+                metric_contributions[metric] = {
+                    'value': value,
+                    'weight': weight,
+                    'contribution': contribution
+                }
+            
+            model_scores.append({
+                'model_result': result,
+                'business_score': business_score,
+                'metric_contributions': metric_contributions
+            })
+        
+        # Sort by business score (descending)
+        model_scores.sort(key=lambda x: x['business_score'], reverse=True)
+        
+        # Select best model
+        best_model_info = model_scores[0]
+        best_model = best_model_info['model_result']
+        
+        # Create ranking of all qualified models
+        model_ranking = []
+        for i, model_info in enumerate(model_scores):
+            model_ranking.append({
+                'rank': i + 1,
+                'model_name': model_info['model_result'].get('model_name'),
+                'business_score': model_info['business_score'],
+                'metric_contributions': model_info['metric_contributions']
+            })
+        
+        # Calculate performance advantages of best model
+        performance_advantages = {}
+        if len(model_scores) > 1:
+            second_best = model_scores[1]['model_result']
+            for metric in business_metrics.keys():
+                best_value = best_model.get(metric, 0)
+                second_value = second_best.get(metric, 0)
+                if second_value > 0:
+                    improvement = ((best_value - second_value) / second_value) * 100
+                    performance_advantages[metric] = {
+                        'best_model_value': best_value,
+                        'second_best_value': second_value,
+                        'improvement_percent': improvement
+                    }
+        
+        return {
+            'best_model': best_model,
+            'best_model_name': best_model.get('model_name'),
+            'business_score': best_model_info['business_score'],
+            'selection_reason': 'Highest business score among qualified models',
+            'model_ranking': model_ranking,
+            'performance_advantages': performance_advantages,
+            'qualified_models_count': len(qualified_models),
+            'disqualified_models': disqualified_models,
+            'business_metrics': business_metrics,
+            'min_thresholds': min_thresholds
+        }
+    
+    def generate_model_selection_report(self,
+                                      model_results: List[Dict[str, Any]],
+                                      cv_results: Optional[List[Dict[str, Any]]] = None,
+                                      business_metrics: Optional[Dict[str, float]] = None) -> Dict[str, Any]:
+        """
+        Generate a comprehensive model selection report.
+        
+        Args:
+            model_results: List of evaluation results from evaluate_model()
+            cv_results: Optional cross-validation results for significance testing
+            business_metrics: Business metric weights for selection
+            
+        Returns:
+            Comprehensive model selection report
+        """
+        report = {
+            'timestamp': datetime.now().isoformat(),
+            'models_evaluated': len(model_results)
+        }
+        
+        # Create comparison table
+        comparison_table = self.create_comparison_table(model_results)
+        report['comparison_table'] = comparison_table.to_dict('records')
+        
+        # Select best model
+        selection_result = self.select_best_model(model_results, business_metrics)
+        report['model_selection'] = selection_result
+        
+        # Add statistical significance testing if CV results provided
+        if cv_results and len(cv_results) >= 2:
+            try:
+                significance_results = self.compare_models_with_significance(cv_results)
+                report['statistical_significance'] = significance_results
+            except Exception as e:
+                report['statistical_significance'] = {
+                    'error': f"Could not perform significance testing: {str(e)}"
+                }
+        
+        # Add summary insights
+        insights = []
+        
+        if selection_result['best_model']:
+            best_name = selection_result['best_model_name']
+            best_score = selection_result['business_score']
+            insights.append(f"Best model: {best_name} with business score of {best_score:.3f}")
+            
+            # Check for performance advantages
+            if selection_result['performance_advantages']:
+                for metric, advantage in selection_result['performance_advantages'].items():
+                    if advantage['improvement_percent'] > 5:  # Significant improvement
+                        insights.append(
+                            f"{best_name} shows {advantage['improvement_percent']:.1f}% "
+                            f"improvement in {metric} over second-best model"
+                        )
+        
+        # Check for disqualified models
+        if selection_result['disqualified_models']:
+            disqualified_count = len(selection_result['disqualified_models'])
+            insights.append(f"{disqualified_count} models failed to meet minimum thresholds")
+        
+        # Performance distribution insights
+        if len(model_results) > 1:
+            f1_scores = [r.get('f1_score', 0) for r in model_results if r.get('f1_score') is not None]
+            if f1_scores:
+                f1_range = max(f1_scores) - min(f1_scores)
+                if f1_range > 0.1:
+                    insights.append(f"Large performance variation: F1-score range of {f1_range:.3f}")
+                else:
+                    insights.append("Models show similar performance levels")
+        
+        report['insights'] = insights
+        
+        return report

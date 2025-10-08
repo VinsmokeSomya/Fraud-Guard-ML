@@ -256,5 +256,307 @@ class TestModelEvaluator:
         assert metrics_neg['f1_score'] == 0.0   # No true positives
 
 
+    def test_create_comparison_table(self, model_evaluator):
+        """Test comparison table creation functionality."""
+        # Create mock evaluation results
+        model_results = [
+            {
+                'model_name': 'LogisticRegression',
+                'accuracy': 0.85, 'precision': 0.75, 'recall': 0.80, 'f1_score': 0.77,
+                'auc_roc': 0.88, 'test_samples': 1000, 'positive_samples': 200
+            },
+            {
+                'model_name': 'RandomForest',
+                'accuracy': 0.88, 'precision': 0.82, 'recall': 0.78, 'f1_score': 0.80,
+                'auc_roc': 0.91, 'test_samples': 1000, 'positive_samples': 200
+            }
+        ]
+        
+        comparison_df = model_evaluator.create_comparison_table(model_results)
+        
+        assert len(comparison_df) == 2
+        assert 'model_name' in comparison_df.columns
+        assert 'f1_score_rank' in comparison_df.columns
+        assert 'auc_roc_rank' in comparison_df.columns
+        
+        # Check ranking (RandomForest should rank higher in F1 and AUC)
+        rf_row = comparison_df[comparison_df['model_name'] == 'RandomForest'].iloc[0]
+        lr_row = comparison_df[comparison_df['model_name'] == 'LogisticRegression'].iloc[0]
+        
+        assert rf_row['f1_score_rank'] < lr_row['f1_score_rank']
+        assert rf_row['auc_roc_rank'] < lr_row['auc_roc_rank']
+    
+    def test_statistical_significance_test(self, model_evaluator):
+        """Test statistical significance testing functionality."""
+        # Test with clearly different scores
+        model1_scores = [0.70, 0.72, 0.71, 0.73, 0.69]
+        model2_scores = [0.80, 0.82, 0.81, 0.83, 0.79]
+        
+        # Test paired t-test
+        result = model_evaluator.statistical_significance_test(
+            model1_scores, model2_scores, test_type='paired_ttest'
+        )
+        
+        assert result['test_type'] == 'paired_ttest'
+        assert result['p_value'] is not None
+        assert result['significant'] is not None
+        assert result['mean_diff'] is not None
+        assert result['effect_size'] is not None
+        
+        # Should be significant difference
+        assert result['significant'] == True
+        assert result['mean_diff'] < 0  # Model 1 should be worse
+        
+        # Test Wilcoxon test
+        wilcoxon_result = model_evaluator.statistical_significance_test(
+            model1_scores, model2_scores, test_type='wilcoxon'
+        )
+        
+        assert wilcoxon_result['test_type'] == 'wilcoxon'
+        assert wilcoxon_result['p_value'] is not None
+        
+        # Test with identical scores (should not be significant)
+        identical_scores = [0.75, 0.75, 0.75, 0.75, 0.75]
+        identical_result = model_evaluator.statistical_significance_test(
+            identical_scores, identical_scores, test_type='paired_ttest'
+        )
+        
+        assert identical_result['p_value'] == 1.0 or np.isnan(identical_result['p_value'])
+        assert identical_result['mean_diff'] == 0.0
+    
+    def test_statistical_significance_edge_cases(self, model_evaluator):
+        """Test statistical significance testing with edge cases."""
+        # Test with insufficient data
+        short_scores1 = [0.7]
+        short_scores2 = [0.8]
+        
+        result = model_evaluator.statistical_significance_test(
+            short_scores1, short_scores2, test_type='paired_ttest'
+        )
+        
+        assert 'error' in result
+        assert result['p_value'] is None
+        
+        # Test with NaN values
+        nan_scores1 = [0.7, np.nan, 0.8, 0.75, 0.72]
+        nan_scores2 = [0.8, 0.82, np.nan, 0.85, 0.79]
+        
+        nan_result = model_evaluator.statistical_significance_test(
+            nan_scores1, nan_scores2, test_type='paired_ttest'
+        )
+        
+        # Should handle NaN values gracefully
+        assert nan_result['p_value'] is not None or 'error' in nan_result
+    
+    def test_compare_models_with_significance(self, model_evaluator):
+        """Test comprehensive model comparison with significance testing."""
+        # Create mock CV results
+        cv_results = [
+            {
+                'cv_summary': {
+                    'f1_score_scores': [0.75, 0.78, 0.76, 0.79, 0.77]
+                },
+                'fold_details': [
+                    {'metrics': {'model_name': 'LogisticRegression'}}
+                ]
+            },
+            {
+                'cv_summary': {
+                    'f1_score_scores': [0.82, 0.84, 0.81, 0.85, 0.83]
+                },
+                'fold_details': [
+                    {'metrics': {'model_name': 'RandomForest'}}
+                ]
+            }
+        ]
+        
+        comparison_result = model_evaluator.compare_models_with_significance(
+            cv_results, metric='f1_score'
+        )
+        
+        assert 'pairwise_comparisons' in comparison_result
+        assert 'comparison_matrix' in comparison_result
+        assert 'summary_statistics' in comparison_result
+        
+        # Check pairwise comparisons
+        pairwise = comparison_result['pairwise_comparisons']
+        assert len(pairwise) == 2  # 2 models = 2 pairwise comparisons
+        
+        # Check summary statistics
+        summary_stats = comparison_result['summary_statistics']
+        assert len(summary_stats) == 2
+        
+        for stat in summary_stats:
+            assert 'model_name' in stat
+            assert 'f1_score_mean' in stat
+            assert 'f1_score_std' in stat
+    
+    def test_select_best_model_default(self, model_evaluator):
+        """Test best model selection with default parameters."""
+        model_results = [
+            {
+                'model_name': 'LogisticRegression',
+                'precision': 0.75, 'recall': 0.80, 'f1_score': 0.77, 'auc_roc': 0.88
+            },
+            {
+                'model_name': 'RandomForest',
+                'precision': 0.82, 'recall': 0.78, 'f1_score': 0.80, 'auc_roc': 0.91
+            },
+            {
+                'model_name': 'XGBoost',
+                'precision': 0.85, 'recall': 0.82, 'f1_score': 0.83, 'auc_roc': 0.93
+            }
+        ]
+        
+        selection_result = model_evaluator.select_best_model(model_results)
+        
+        assert selection_result['best_model'] is not None
+        assert selection_result['best_model_name'] == 'XGBoost'  # Should be best overall
+        assert 'business_score' in selection_result
+        assert 'model_ranking' in selection_result
+        assert len(selection_result['model_ranking']) == 3
+        
+        # Check ranking order
+        ranking = selection_result['model_ranking']
+        assert ranking[0]['model_name'] == 'XGBoost'
+        assert ranking[0]['rank'] == 1
+    
+    def test_select_best_model_custom_metrics(self, model_evaluator):
+        """Test best model selection with custom business metrics."""
+        model_results = [
+            {
+                'model_name': 'HighPrecision',
+                'precision': 0.95, 'recall': 0.60, 'f1_score': 0.74, 'auc_roc': 0.85
+            },
+            {
+                'model_name': 'HighRecall',
+                'precision': 0.70, 'recall': 0.90, 'f1_score': 0.79, 'auc_roc': 0.88
+            }
+        ]
+        
+        # Prioritize precision
+        precision_focused = {
+            'precision': 0.7,
+            'recall': 0.2,
+            'f1_score': 0.1
+        }
+        
+        precision_result = model_evaluator.select_best_model(
+            model_results, business_metrics=precision_focused
+        )
+        
+        assert precision_result['best_model_name'] == 'HighPrecision'
+        
+        # Prioritize recall
+        recall_focused = {
+            'precision': 0.2,
+            'recall': 0.7,
+            'f1_score': 0.1
+        }
+        
+        recall_result = model_evaluator.select_best_model(
+            model_results, business_metrics=recall_focused
+        )
+        
+        assert recall_result['best_model_name'] == 'HighRecall'
+    
+    def test_select_best_model_thresholds(self, model_evaluator):
+        """Test best model selection with minimum thresholds."""
+        model_results = [
+            {
+                'model_name': 'LowPerformance',
+                'precision': 0.40, 'recall': 0.45, 'f1_score': 0.42, 'auc_roc': 0.65
+            },
+            {
+                'model_name': 'GoodPerformance',
+                'precision': 0.80, 'recall': 0.75, 'f1_score': 0.77, 'auc_roc': 0.88
+            }
+        ]
+        
+        # Set high thresholds
+        high_thresholds = {
+            'precision': 0.70,
+            'recall': 0.70,
+            'f1_score': 0.70
+        }
+        
+        selection_result = model_evaluator.select_best_model(
+            model_results, min_thresholds=high_thresholds
+        )
+        
+        assert selection_result['best_model_name'] == 'GoodPerformance'
+        assert selection_result['qualified_models_count'] == 1
+        assert len(selection_result['disqualified_models']) == 1
+        assert selection_result['disqualified_models'][0]['model_name'] == 'LowPerformance'
+        
+        # Test with impossible thresholds
+        impossible_thresholds = {
+            'precision': 0.99,
+            'recall': 0.99,
+            'f1_score': 0.99
+        }
+        
+        impossible_result = model_evaluator.select_best_model(
+            model_results, min_thresholds=impossible_thresholds
+        )
+        
+        assert impossible_result['best_model'] is None
+        assert 'No models met minimum thresholds' in impossible_result['selection_reason']
+        assert len(impossible_result['disqualified_models']) == 2
+    
+    def test_generate_model_selection_report(self, model_evaluator):
+        """Test comprehensive model selection report generation."""
+        model_results = [
+            {
+                'model_name': 'Model1',
+                'accuracy': 0.85, 'precision': 0.75, 'recall': 0.80, 'f1_score': 0.77,
+                'auc_roc': 0.88, 'test_samples': 1000, 'positive_samples': 200
+            },
+            {
+                'model_name': 'Model2',
+                'accuracy': 0.88, 'precision': 0.82, 'recall': 0.78, 'f1_score': 0.80,
+                'auc_roc': 0.91, 'test_samples': 1000, 'positive_samples': 200
+            }
+        ]
+        
+        cv_results = [
+            {
+                'cv_summary': {'f1_score_scores': [0.75, 0.78, 0.76, 0.79, 0.77]},
+                'fold_details': [{'metrics': {'model_name': 'Model1'}}]
+            },
+            {
+                'cv_summary': {'f1_score_scores': [0.79, 0.81, 0.78, 0.82, 0.80]},
+                'fold_details': [{'metrics': {'model_name': 'Model2'}}]
+            }
+        ]
+        
+        report = model_evaluator.generate_model_selection_report(
+            model_results, cv_results
+        )
+        
+        # Check report structure
+        assert 'timestamp' in report
+        assert 'models_evaluated' in report
+        assert 'comparison_table' in report
+        assert 'model_selection' in report
+        assert 'statistical_significance' in report
+        assert 'insights' in report
+        
+        assert report['models_evaluated'] == 2
+        assert len(report['comparison_table']) == 2
+        assert isinstance(report['insights'], list)
+        
+        # Check that insights are generated
+        assert len(report['insights']) > 0
+        
+        # Test report without CV results
+        report_no_cv = model_evaluator.generate_model_selection_report(model_results)
+        
+        assert 'comparison_table' in report_no_cv
+        assert 'model_selection' in report_no_cv
+        # Should not have statistical significance without CV results
+        assert 'statistical_significance' not in report_no_cv or 'error' in report_no_cv.get('statistical_significance', {})
+
+
 if __name__ == "__main__":
     pytest.main([__file__])
