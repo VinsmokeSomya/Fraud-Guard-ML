@@ -201,7 +201,13 @@
     - _Requirements: 5.1, 5.2, 5.4_
 
 - [ ] 7. Build fraud detection service and API
-  - [ ] 7.1 Create FraudDetector service class
+  - [x] 7.1 Create FraudDetector service class
+
+
+
+
+
+
     - Implement real-time transaction scoring
     - Add batch prediction functionality for multiple transactions
     - Create fraud explanation and risk factor identification
