@@ -353,11 +353,13 @@ class FraudDashboard:
         
         # Transaction type distribution
         if 'type' in data.columns:
+            type_counts = data['type'].value_counts().reset_index()
+            type_counts.columns = ['Transaction Type', 'Count']
             fig_type = px.bar(
-                data['type'].value_counts().reset_index(),
-                x='index', y='type',
+                type_counts,
+                x='Transaction Type', y='Count',
                 title="Transaction Type Distribution",
-                labels={'index': 'Transaction Type', 'type': 'Count'}
+                labels={'Transaction Type': 'Transaction Type', 'Count': 'Count'}
             )
             st.plotly_chart(fig_type, use_container_width=True)
         

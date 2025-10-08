@@ -44,3 +44,8 @@ flake8>=6.0.0
 # Jupyter for experimentation
 jupyter>=1.0.0
 ipykernel>=6.25.0
+
+# Dashboard-specific requirements
+# Additional dashboard dependencies
+streamlit-aggrid>=0.3.4
+streamlit-plotly-events>=0.0.6
