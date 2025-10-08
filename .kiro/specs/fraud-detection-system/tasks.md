@@ -175,7 +175,11 @@
     - Implement correlation heatmaps and feature distributions
     - _Requirements: 4.1, 4.2_
   
-  - [ ] 6.2 Build ModelVisualizer class for performance charts
+  - [x] 6.2 Build ModelVisualizer class for performance charts
+
+
+
+
 
 
 
@@ -186,7 +190,11 @@
     - Implement feature importance bar charts and SHAP plots
     - _Requirements: 4.3, 4.4_
   
-  - [ ] 6.3 Implement fraud pattern analysis utilities
+  - [x] 6.3 Implement fraud pattern analysis utilities
+
+
+
+
     - Create time series plots of fraud occurrence
     - Build customer behavior analysis charts
     - Add risk factor identification and ranking
