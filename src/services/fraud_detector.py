@@ -33,7 +33,8 @@ class FraudDetector:
                  model: Optional[FraudModelInterface] = None,
                  risk_threshold: float = 0.5,
                  high_risk_threshold: float = 0.8,
-                 enable_explanations: bool = True):
+                 enable_explanations: bool = True,
+                 alert_manager: Optional['AlertManager'] = None):
         """
         Initialize the FraudDetector service.
         
@@ -42,11 +43,15 @@ class FraudDetector:
             risk_threshold: Threshold for classifying transactions as fraudulent
             high_risk_threshold: Threshold for high-risk alerts
             enable_explanations: Whether to generate detailed fraud explanations
+            alert_manager: AlertManager instance for handling alerts
         """
         self.model = model
         self.risk_threshold = risk_threshold
         self.high_risk_threshold = high_risk_threshold
         self.enable_explanations = enable_explanations
+        
+        # Initialize AlertManager if provided
+        self.alert_manager = alert_manager
         
         # Initialize fraud pattern analyzer for risk factor identification
         self.pattern_analyzer = FraudPatternAnalyzer()
@@ -66,7 +71,8 @@ class FraudDetector:
         self._cache_timestamp = None
         
         logger.info(f"FraudDetector initialized with risk_threshold={risk_threshold}, "
-                   f"high_risk_threshold={high_risk_threshold}")
+                   f"high_risk_threshold={high_risk_threshold}, "
+                   f"alert_manager={'enabled' if alert_manager else 'disabled'}")
     
     def load_model(self, model_path: str) -> None:
         """
@@ -109,6 +115,28 @@ class FraudDetector:
                 fraud_score = fraud_probabilities[0, 1]  # Probability of fraud class
             
             logger.debug(f"Transaction scored with fraud probability: {fraud_score}")
+            
+            # Check for alert conditions if AlertManager is available
+            if self.alert_manager and fraud_score >= self.risk_threshold:
+                try:
+                    # Get detailed explanation for alert
+                    explanation_data = self.get_fraud_explanation(transaction)
+                    
+                    # Create alert if conditions are met
+                    alert = self.alert_manager.check_alert_conditions(
+                        fraud_score=fraud_score,
+                        transaction_data=transaction,
+                        risk_factors=explanation_data.get('risk_factors', {}),
+                        explanation=explanation_data.get('explanation_text', ''),
+                        recommendations=explanation_data.get('recommendations', [])
+                    )
+                    
+                    if alert:
+                        logger.info(f"Alert created for transaction: {alert.alert_id}")
+                        
+                except Exception as e:
+                    logger.error(f"Error creating alert for transaction: {e}")
+            
             return float(fraud_score)
             
         except Exception as e:
@@ -571,8 +599,14 @@ class FraudDetector:
             'risk_threshold': self.risk_threshold,
             'high_risk_threshold': self.high_risk_threshold,
             'explanations_enabled': self.enable_explanations,
+            'alert_manager_enabled': self.alert_manager is not None,
             'timestamp': datetime.now().isoformat()
         }
+        
+        # Add alert statistics if AlertManager is available
+        if self.alert_manager:
+            alert_stats = self.alert_manager.get_alert_statistics()
+            status['alert_statistics'] = alert_stats
         
         if self.model is not None:
             try:
@@ -608,3 +642,24 @@ class FraudDetector:
         if (risk_threshold is not None and high_risk_threshold is not None and 
             risk_threshold >= high_risk_threshold):
             logger.warning("Risk threshold should be lower than high risk threshold")
+    
+    def set_alert_manager(self, alert_manager: 'AlertManager') -> None:
+        """
+        Set the AlertManager instance for handling fraud alerts.
+        
+        Args:
+            alert_manager: AlertManager instance
+        """
+        self.alert_manager = alert_manager
+        logger.info("AlertManager has been configured for FraudDetector")
+    
+    def get_alert_statistics(self) -> Optional[Dict[str, Any]]:
+        """
+        Get alert statistics from the AlertManager.
+        
+        Returns:
+            Alert statistics dictionary or None if AlertManager not configured
+        """
+        if self.alert_manager:
+            return self.alert_manager.get_alert_statistics()
+        return None

@@ -17,6 +17,7 @@ import pandas as pd
 import uvicorn
 
 from src.services.fraud_detector import FraudDetector
+from src.services.alert_manager import AlertManager, AlertSeverity, NotificationConfig
 from src.utils.config import get_logger
 
 logger = get_logger(__name__)
@@ -30,8 +31,9 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
-# Global fraud detector instance
+# Global fraud detector and alert manager instances
 fraud_detector: Optional[FraudDetector] = None
+alert_manager: Optional[AlertManager] = None
 
 
 # Pydantic models for request/response validation
@@ -112,6 +114,36 @@ class ThresholdUpdateRequest(BaseModel):
     """Request model for updating fraud detection thresholds."""
     risk_threshold: Optional[float] = Field(None, ge=0, le=1, description="Risk threshold (0-1)")
     high_risk_threshold: Optional[float] = Field(None, ge=0, le=1, description="High-risk threshold (0-1)")
+
+
+class AlertAcknowledgeRequest(BaseModel):
+    """Request model for acknowledging alerts."""
+    acknowledged_by: str = Field(..., description="User who is acknowledging the alert")
+
+
+class AlertResponse(BaseModel):
+    """Response model for alert information."""
+    alert_id: str = Field(..., description="Alert identifier")
+    fraud_score: float = Field(..., description="Fraud score that triggered the alert")
+    severity: str = Field(..., description="Alert severity level")
+    risk_level: str = Field(..., description="Risk level")
+    transaction_data: Dict[str, Any] = Field(..., description="Transaction data")
+    explanation: str = Field(..., description="Fraud explanation")
+    recommendations: List[str] = Field(..., description="Recommended actions")
+    created_at: str = Field(..., description="Alert creation timestamp")
+    status: str = Field(..., description="Alert status")
+    acknowledged_by: Optional[str] = Field(None, description="User who acknowledged the alert")
+
+
+class AlertStatisticsResponse(BaseModel):
+    """Response model for alert statistics."""
+    total_alerts: int = Field(..., description="Total number of alerts")
+    active_alerts: int = Field(..., description="Number of active alerts")
+    acknowledged_alerts: int = Field(..., description="Number of acknowledged alerts")
+    alerts_by_severity: Dict[str, int] = Field(..., description="Alert count by severity")
+    notifications_sent: int = Field(..., description="Number of notifications sent")
+    notifications_failed: int = Field(..., description="Number of failed notifications")
+    notification_success_rate: float = Field(..., description="Notification success rate")
 
 
 # Dependency to get fraud detector instance
@@ -419,7 +451,11 @@ async def get_service_status(detector: FraudDetector = Depends(get_fraud_detecto
                 "predict_explain": "/predict/explain",
                 "batch_predict": "/predict/batch",
                 "update_thresholds": "/config/thresholds",
-                "status": "/status"
+                "status": "/status",
+                "alerts": "/alerts",
+                "alert_history": "/alerts/history",
+                "acknowledge_alert": "/alerts/{alert_id}/acknowledge",
+                "alert_statistics": "/alerts/statistics"
             }
         })
         
@@ -433,30 +469,284 @@ async def get_service_status(detector: FraudDetector = Depends(get_fraud_detecto
         )
 
 
+@app.get("/alerts", response_model=List[AlertResponse])
+async def get_active_alerts(
+    severity: Optional[str] = None,
+    detector: FraudDetector = Depends(get_fraud_detector)
+):
+    """
+    Get list of active fraud alerts.
+    
+    Args:
+        severity: Optional severity filter (LOW, MEDIUM, HIGH, CRITICAL)
+        detector: Fraud detector service instance
+        
+    Returns:
+        List of active alerts
+    """
+    try:
+        if not detector.alert_manager:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Alert manager is not configured"
+            )
+        
+        # Parse severity filter
+        severity_filter = None
+        if severity:
+            try:
+                severity_filter = AlertSeverity(severity.upper())
+            except ValueError:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid severity level: {severity}"
+                )
+        
+        # Get active alerts
+        alerts = detector.alert_manager.get_active_alerts(severity_filter)
+        
+        # Convert to response format
+        alert_responses = []
+        for alert in alerts:
+            alert_response = AlertResponse(
+                alert_id=alert.alert_id,
+                fraud_score=alert.fraud_score,
+                severity=alert.severity.value,
+                risk_level=alert.risk_level,
+                transaction_data=alert.transaction_data,
+                explanation=alert.explanation,
+                recommendations=alert.recommendations,
+                created_at=alert.created_at.isoformat(),
+                status=alert.status.value,
+                acknowledged_by=alert.acknowledged_by
+            )
+            alert_responses.append(alert_response)
+        
+        logger.info(f"Retrieved {len(alert_responses)} active alerts")
+        return alert_responses
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error retrieving alerts: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve alerts: {str(e)}"
+        )
+
+
+@app.get("/alerts/history", response_model=List[AlertResponse])
+async def get_alert_history(
+    hours_back: int = 24,
+    severity: Optional[str] = None,
+    detector: FraudDetector = Depends(get_fraud_detector)
+):
+    """
+    Get alert history for specified time period.
+    
+    Args:
+        hours_back: Number of hours to look back (default: 24)
+        severity: Optional severity filter (LOW, MEDIUM, HIGH, CRITICAL)
+        detector: Fraud detector service instance
+        
+    Returns:
+        List of historical alerts
+    """
+    try:
+        if not detector.alert_manager:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Alert manager is not configured"
+            )
+        
+        # Validate hours_back parameter
+        if hours_back < 1 or hours_back > 168:  # Max 1 week
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="hours_back must be between 1 and 168 (1 week)"
+            )
+        
+        # Parse severity filter
+        severity_filter = None
+        if severity:
+            try:
+                severity_filter = AlertSeverity(severity.upper())
+            except ValueError:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid severity level: {severity}"
+                )
+        
+        # Get alert history
+        alerts = detector.alert_manager.get_alert_history(hours_back, severity_filter)
+        
+        # Convert to response format
+        alert_responses = []
+        for alert in alerts:
+            alert_response = AlertResponse(
+                alert_id=alert.alert_id,
+                fraud_score=alert.fraud_score,
+                severity=alert.severity.value,
+                risk_level=alert.risk_level,
+                transaction_data=alert.transaction_data,
+                explanation=alert.explanation,
+                recommendations=alert.recommendations,
+                created_at=alert.created_at.isoformat(),
+                status=alert.status.value,
+                acknowledged_by=alert.acknowledged_by
+            )
+            alert_responses.append(alert_response)
+        
+        logger.info(f"Retrieved {len(alert_responses)} historical alerts for {hours_back} hours")
+        return alert_responses
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error retrieving alert history: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve alert history: {str(e)}"
+        )
+
+
+@app.post("/alerts/{alert_id}/acknowledge", response_model=Dict[str, Any])
+async def acknowledge_alert(
+    alert_id: str,
+    acknowledge_request: AlertAcknowledgeRequest,
+    detector: FraudDetector = Depends(get_fraud_detector)
+):
+    """
+    Acknowledge a fraud alert.
+    
+    Args:
+        alert_id: Alert identifier
+        acknowledge_request: Acknowledgment details
+        detector: Fraud detector service instance
+        
+    Returns:
+        Acknowledgment confirmation
+    """
+    try:
+        if not detector.alert_manager:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Alert manager is not configured"
+            )
+        
+        # Acknowledge the alert
+        success = detector.alert_manager.acknowledge_alert(
+            alert_id=alert_id,
+            acknowledged_by=acknowledge_request.acknowledged_by
+        )
+        
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Alert not found: {alert_id}"
+            )
+        
+        response = {
+            "message": "Alert acknowledged successfully",
+            "alert_id": alert_id,
+            "acknowledged_by": acknowledge_request.acknowledged_by,
+            "acknowledged_at": datetime.now().isoformat()
+        }
+        
+        logger.info(f"Alert acknowledged: {alert_id} by {acknowledge_request.acknowledged_by}")
+        return response
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error acknowledging alert: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to acknowledge alert: {str(e)}"
+        )
+
+
+@app.get("/alerts/statistics", response_model=AlertStatisticsResponse)
+async def get_alert_statistics(detector: FraudDetector = Depends(get_fraud_detector)):
+    """
+    Get alert statistics and metrics.
+    
+    Args:
+        detector: Fraud detector service instance
+        
+    Returns:
+        Alert statistics
+    """
+    try:
+        if not detector.alert_manager:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Alert manager is not configured"
+            )
+        
+        # Get statistics from alert manager
+        stats = detector.alert_manager.get_alert_statistics()
+        
+        response = AlertStatisticsResponse(
+            total_alerts=stats['total_alerts'],
+            active_alerts=stats['active_alerts'],
+            acknowledged_alerts=stats['acknowledged_alerts'],
+            alerts_by_severity=stats['alerts_by_severity'],
+            notifications_sent=stats['notifications_sent'],
+            notifications_failed=stats['notifications_failed'],
+            notification_success_rate=stats['notification_success_rate']
+        )
+        
+        logger.info("Alert statistics retrieved successfully")
+        return response
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error retrieving alert statistics: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve alert statistics: {str(e)}"
+        )
+
+
 # Service initialization and management functions
 
 def initialize_fraud_detector(model_path: Optional[str] = None,
                             risk_threshold: float = 0.5,
                             high_risk_threshold: float = 0.8,
-                            enable_explanations: bool = True) -> None:
+                            enable_explanations: bool = True,
+                            enable_alerts: bool = True,
+                            notification_config: Optional[NotificationConfig] = None) -> None:
     """
-    Initialize the fraud detector service.
+    Initialize the fraud detector service with optional AlertManager.
     
     Args:
         model_path: Path to trained model file
         risk_threshold: Fraud classification threshold
         high_risk_threshold: High-risk alert threshold
         enable_explanations: Whether to enable detailed explanations
+        enable_alerts: Whether to enable alert management
+        notification_config: Configuration for alert notifications
     """
-    global fraud_detector
+    global fraud_detector, alert_manager
     
     try:
+        # Initialize AlertManager if enabled
+        if enable_alerts:
+            alert_manager = AlertManager(
+                notification_config=notification_config,
+                enable_async_notifications=True
+            )
+            logger.info("AlertManager initialized successfully")
+        
         # Initialize fraud detector
         fraud_detector = FraudDetector(
             model=None,  # Model will be loaded separately
             risk_threshold=risk_threshold,
             high_risk_threshold=high_risk_threshold,
-            enable_explanations=enable_explanations
+            enable_explanations=enable_explanations,
+            alert_manager=alert_manager
         )
         
         # Load model if path provided
