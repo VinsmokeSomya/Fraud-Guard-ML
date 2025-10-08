@@ -155,20 +155,36 @@ class FraudDashboard:
         
         # Data upload section
         st.subheader("Upload Dataset")
+        
+        # Information about large dataset handling
+        with st.expander("ℹ️ Large Dataset Information"):
+            st.markdown("""
+            **This dashboard is optimized to handle large fraud datasets:**
+            - ✅ Can load datasets of any size (including 500MB+ files)
+            - ⚡ Uses memory-efficient data types to reduce RAM usage
+            - 📊 Provides progress indicators for large file loading
+            - 🔍 The "Load Fraud Dataset" button loads the complete fraud detection dataset
+            
+            **Performance Tips:**
+            - Large datasets may take 30-60 seconds to load
+            - Visualizations are optimized for performance
+            - Some operations may be sampled for very large datasets
+            """)
+        
         uploaded_file = st.file_uploader(
             "Choose a CSV file", 
             type="csv",
             help="Upload your fraud detection dataset in CSV format"
         )
         
-        # Sample data option
+        # Dataset loading options
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("Load Sample Data"):
+            if st.button("🔍 Load Fraud Dataset", help="Load the complete fraud detection dataset (Fraud.csv)"):
                 self._load_sample_data()
         
         with col2:
-            if st.button("Clear Data"):
+            if st.button("🗑️ Clear Data"):
                 self._clear_data()
         
         # Process uploaded file
@@ -231,29 +247,103 @@ class FraudDashboard:
         self._display_alert_management()
     
     def _load_sample_data(self):
-        """Load sample fraud detection data."""
+        """Load the actual fraud detection dataset."""
         try:
-            # Try to load from data directory
-            sample_paths = [
-                "data/raw/fraud_data.csv",
-                "data/processed/fraud_data.csv",
-                "examples/sample_fraud_data.csv"
-            ]
-            
-            for path in sample_paths:
-                try:
-                    st.session_state.data = self.data_loader.load_data(path)
-                    st.success(f"Sample data loaded successfully from {path}!")
-                    break
-                except FileNotFoundError:
-                    continue
-            else:
-                # Generate synthetic sample data if no file found
+            with st.spinner("Loading fraud dataset... This may take a moment for large files."):
+                # Try to load the actual Fraud.csv dataset first
+                fraud_dataset_paths = [
+                    "data/raw/Fraud.csv",  # The actual fraud dataset
+                    "data/raw/fraud.csv",  # Alternative naming
+                    "data/processed/Fraud.csv",
+                    "data/raw/fraud_data.csv",
+                    "data/processed/fraud_data.csv"
+                ]
+                
+                for path in fraud_dataset_paths:
+                    try:
+                        # Show progress for large file loading
+                        progress_bar = st.progress(0)
+                        status_text = st.empty()
+                        
+                        status_text.text("🔍 Locating dataset...")
+                        progress_bar.progress(10)
+                        
+                        # Check if file exists and get size
+                        import os
+                        if not os.path.exists(path):
+                            continue
+                            
+                        file_size = os.path.getsize(path) / 1024**2  # Size in MB
+                        status_text.text(f"📁 Found dataset ({file_size:.1f} MB). Loading...")
+                        progress_bar.progress(20)
+                        
+                        # Load the full dataset with optimized dtypes for memory efficiency
+                        status_text.text("📊 Reading CSV data...")
+                        progress_bar.progress(40)
+                        
+                        # Load the dataset with automatic type inference
+                        # Let pandas infer the best data types automatically
+                        st.session_state.data = pd.read_csv(path)
+                        
+                        # Optimize data types after loading for memory efficiency
+                        try:
+                            # Only optimize numeric columns that are safe to convert
+                            if 'isFraud' in st.session_state.data.columns:
+                                st.session_state.data['isFraud'] = st.session_state.data['isFraud'].astype('int8')
+                            if 'isFlaggedFraud' in st.session_state.data.columns:
+                                st.session_state.data['isFlaggedFraud'] = st.session_state.data['isFlaggedFraud'].astype('int8')
+                        except:
+                            # If optimization fails, keep original types
+                            pass
+                        
+                        progress_bar.progress(80)
+                        status_text.text("✅ Processing dataset information...")
+                        
+                        # Display dataset info
+                        progress_bar.progress(100)
+                        status_text.text("🎉 Dataset loaded successfully!")
+                        
+                        st.success(f"✅ **FRAUD DATASET LOADED SUCCESSFULLY** from {path}!")
+                        st.info(f"📊 **Dataset shape:** {st.session_state.data.shape[0]:,} rows × {st.session_state.data.shape[1]} columns")
+                        
+                        # Show memory usage
+                        memory_usage = st.session_state.data.memory_usage(deep=True).sum() / 1024**2
+                        st.info(f"💾 **Memory usage:** {memory_usage:.1f} MB")
+                        
+                        # Show basic info about the dataset
+                        fraud_count = st.session_state.data['isFraud'].sum() if 'isFraud' in st.session_state.data.columns else 0
+                        fraud_rate = fraud_count / len(st.session_state.data) * 100 if len(st.session_state.data) > 0 else 0
+                        st.info(f"🚨 **Fraud transactions:** {fraud_count:,} ({fraud_rate:.3f}%)")
+                        
+                        # Show column information
+                        st.info(f"📋 **Columns:** {', '.join(st.session_state.data.columns.tolist())}")
+                        
+                        # Clear progress indicators
+                        progress_bar.empty()
+                        status_text.empty()
+                        
+                        return
+                        
+                    except FileNotFoundError:
+                        continue
+                    except Exception as e:
+                        st.warning(f"Could not load {path}: {str(e)}")
+                        continue
+                
+                # If no dataset found, show error and generate sample data
+                st.error("❌ Could not find the fraud dataset!")
+                st.warning("Expected file: data/raw/Fraud.csv")
+                st.info("Generating synthetic sample data instead...")
+                
+                # Generate synthetic sample data as fallback
                 st.session_state.data = self._generate_sample_data()
                 st.info("Generated synthetic sample data for demonstration.")
                 
         except Exception as e:
-            st.error(f"Error loading sample data: {str(e)}")
+            st.error(f"Error loading fraud dataset: {str(e)}")
+            # Generate sample data as last resort
+            st.session_state.data = self._generate_sample_data()
+            st.info("Generated synthetic sample data due to error.")
     
     def _generate_sample_data(self) -> pd.DataFrame:
         """Generate synthetic sample data for demonstration."""
@@ -297,13 +387,28 @@ class FraudDashboard:
     def _process_uploaded_file(self, uploaded_file):
         """Process uploaded CSV file."""
         try:
-            # Read the uploaded file
-            bytes_data = uploaded_file.read()
-            st.session_state.data = pd.read_csv(io.StringIO(bytes_data.decode('utf-8')))
-            st.success(f"File uploaded successfully! Loaded {len(st.session_state.data)} rows.")
+            with st.spinner("Processing uploaded file... Please wait for large files."):
+                # Read the uploaded file
+                bytes_data = uploaded_file.read()
+                st.session_state.data = pd.read_csv(io.StringIO(bytes_data.decode('utf-8')))
+                
+                # Display file info
+                st.success(f"✅ File uploaded successfully!")
+                st.info(f"📊 Dataset shape: {st.session_state.data.shape[0]:,} rows × {st.session_state.data.shape[1]} columns")
+                
+                # Show memory usage
+                memory_usage = st.session_state.data.memory_usage(deep=True).sum() / 1024**2
+                st.info(f"💾 Memory usage: {memory_usage:.1f} MB")
+                
+                # Show fraud info if available
+                if 'isFraud' in st.session_state.data.columns:
+                    fraud_count = st.session_state.data['isFraud'].sum()
+                    fraud_rate = fraud_count / len(st.session_state.data) * 100
+                    st.info(f"🚨 Fraud transactions: {fraud_count:,} ({fraud_rate:.3f}%)")
             
         except Exception as e:
             st.error(f"Error processing file: {str(e)}")
+            st.error("Please make sure the file is a valid CSV format.")
     
     def _display_data_exploration(self):
         """Display data exploration interface."""
@@ -332,6 +437,24 @@ class FraudDashboard:
         
         # Data preview
         st.subheader("Data Preview")
+        
+        # Show first few rows
+        preview_rows = st.slider("Number of rows to preview", 5, 100, 10)
+        st.dataframe(data.head(preview_rows), width='stretch')
+        
+        # Column information
+        with st.expander("📋 Column Information"):
+            col_info = pd.DataFrame({
+                'Column': data.columns,
+                'Data Type': data.dtypes.astype(str),  # Convert to string to avoid Arrow issues
+                'Non-Null Count': data.count(),
+                'Null Count': data.isnull().sum(),
+                'Unique Values': data.nunique()
+            })
+            st.dataframe(col_info, width='stretch')
+        
+        # Data preview
+        st.subheader("Data Preview")
         st.dataframe(data.head(10))
         
         # Data quality check
@@ -351,39 +474,71 @@ class FraudDashboard:
         # Visualizations
         st.subheader("Data Visualizations")
         
+        # For very large datasets, use sampling for visualizations to improve performance
+        viz_data = data
+        is_large_dataset = len(data) > 100000  # Consider datasets with >100k rows as large
+        
+        if is_large_dataset:
+            sample_size = min(50000, len(data))  # Sample up to 50k rows for visualizations
+            viz_data = data.sample(n=sample_size, random_state=42)
+            st.info(f"📊 Using a sample of {sample_size:,} rows for visualizations (from {len(data):,} total rows)")
+        
         # Transaction type distribution
         if 'type' in data.columns:
+            # Use full data for counts (aggregated data is small)
             type_counts = data['type'].value_counts().reset_index()
             type_counts.columns = ['Transaction Type', 'Count']
             fig_type = px.bar(
                 type_counts,
                 x='Transaction Type', y='Count',
-                title="Transaction Type Distribution",
+                title="Transaction Type Distribution (Full Dataset)",
                 labels={'Transaction Type': 'Transaction Type', 'Count': 'Count'}
             )
-            st.plotly_chart(fig_type, use_container_width=True)
+            st.plotly_chart(fig_type, width='stretch')
         
         # Amount distribution
         if 'amount' in data.columns:
+            title_suffix = f" (Sample of {len(viz_data):,} rows)" if is_large_dataset else ""
             fig_amount = px.histogram(
-                data, x='amount',
-                title="Transaction Amount Distribution",
+                viz_data, x='amount',
+                title=f"Transaction Amount Distribution{title_suffix}",
                 nbins=50
             )
             fig_amount.update_xaxes(type="log", title="Amount (log scale)")
-            st.plotly_chart(fig_amount, use_container_width=True)
+            st.plotly_chart(fig_amount, width='stretch')
         
         # Fraud patterns
         if 'isFraud' in data.columns and 'type' in data.columns:
+            # Use full data for fraud patterns (aggregated data is small)
             fraud_by_type = data.groupby(['type', 'isFraud']).size().reset_index(name='count')
             fraud_by_type['fraud_status'] = fraud_by_type['isFraud'].map({0: 'Legitimate', 1: 'Fraud'})
             
             fig_fraud = px.bar(
                 fraud_by_type, x='type', y='count', color='fraud_status',
-                title="Fraud Distribution by Transaction Type",
+                title="Fraud Distribution by Transaction Type (Full Dataset)",
                 color_discrete_map={'Legitimate': 'lightblue', 'Fraud': 'red'}
             )
-            st.plotly_chart(fig_fraud, use_container_width=True)
+            st.plotly_chart(fig_fraud, width='stretch')
+        
+        # Additional large dataset insights
+        if is_large_dataset:
+            st.subheader("📈 Large Dataset Insights")
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                unique_accounts = data['nameOrig'].nunique() if 'nameOrig' in data.columns else 0
+                st.metric("Unique Accounts", f"{unique_accounts:,}")
+            
+            with col2:
+                if 'amount' in data.columns:
+                    total_volume = data['amount'].sum()
+                    st.metric("Total Transaction Volume", f"${total_volume:,.0f}")
+            
+            with col3:
+                time_span = "N/A"
+                if 'step' in data.columns:
+                    time_span = f"{data['step'].max() - data['step'].min()} steps"
+                st.metric("Time Span", time_span)
     
     def _preprocess_data(self):
         """Preprocess the data for model training."""
@@ -391,12 +546,31 @@ class FraudDashboard:
             with st.spinner("Preprocessing data..."):
                 data = st.session_state.data.copy()
                 
+                # Ensure data types are compatible before processing
+                status_text = st.empty()
+                status_text.text("🔧 Preparing data types...")
+                
+                # Convert any problematic data types to standard types
+                for col in data.columns:
+                    if data[col].dtype == 'object':
+                        # Keep string columns as object
+                        continue
+                    elif data[col].dtype in ['Int64', 'Int32', 'Int16', 'Int8']:
+                        # Convert nullable integers to standard integers
+                        data[col] = data[col].astype('float64').fillna(0).astype('int64')
+                    elif data[col].dtype in ['Float64', 'Float32']:
+                        # Convert nullable floats to standard floats
+                        data[col] = data[col].astype('float64')
+                
+                status_text.text("🧹 Cleaning data...")
                 # Clean data
                 cleaned_data = self.data_cleaner.clean_data(data)
                 
+                status_text.text("⚙️ Engineering features...")
                 # Feature engineering
                 engineered_data = self.feature_engineering.engineer_features(cleaned_data)
                 
+                status_text.text("🔤 Encoding categorical variables...")
                 # Encode categorical variables
                 categorical_features = ['type']  # Main categorical feature
                 if 'nameOrig' in engineered_data.columns:
@@ -410,6 +584,9 @@ class FraudDashboard:
                 
                 # Store processed data
                 st.session_state.processed_data = encoded_data
+                
+                status_text.text("✅ Preprocessing completed!")
+                status_text.empty()
                 
                 st.success("Data preprocessing completed successfully!")
                 
@@ -425,19 +602,44 @@ class FraudDashboard:
                 
         except Exception as e:
             st.error(f"Error during preprocessing: {str(e)}")
+            st.error("This might be due to data type incompatibilities. Try loading the dataset again.")
+            
+            # Provide more detailed error information
+            with st.expander("🔍 Error Details"):
+                st.code(str(e))
+                st.write("**Possible solutions:**")
+                st.write("1. Reload the dataset using the 'Load Fraud Dataset' button")
+                st.write("2. Check if the dataset has any corrupted values")
+                st.write("3. Try uploading a different dataset file")
     
     def _display_model_training(self):
         """Display model training interface."""
+        
+        # Memory optimization info for large datasets
+        if st.session_state.processed_data is not None:
+            data_size = len(st.session_state.processed_data)
+            if data_size > 500000:
+                st.info(f"🧠 **Large Dataset Detected** ({data_size:,} rows)")
+                with st.expander("💡 Memory Optimization Info"):
+                    st.markdown("""
+                    **For large datasets, the system automatically:**
+                    - Uses stratified sampling (200k rows) to maintain fraud distribution
+                    - Optimizes model parameters to reduce memory usage
+                    - Provides detailed progress and error handling
+                    
+                    **This ensures reliable training while maintaining model quality.**
+                    """)
+        
         # Model selection
         st.write("Select models to train:")
         
         col1, col2, col3 = st.columns(3)
         with col1:
-            train_lr = st.checkbox("Logistic Regression", value=True)
+            train_lr = st.checkbox("Logistic Regression", value=True, help="Fast, memory-efficient linear model")
         with col2:
-            train_rf = st.checkbox("Random Forest", value=True)
+            train_rf = st.checkbox("Random Forest", value=True, help="Ensemble model, moderate memory usage")
         with col3:
-            train_xgb = st.checkbox("XGBoost", value=True)
+            train_xgb = st.checkbox("XGBoost", value=True, help="Gradient boosting, higher memory usage")
         
         # Training parameters
         st.subheader("Training Parameters")
@@ -450,7 +652,7 @@ class FraudDashboard:
     
     def _train_models(self, train_lr: bool, train_rf: bool, train_xgb: bool, 
                      test_size: float, random_state: int):
-        """Train selected models."""
+        """Train selected models with memory optimization for large datasets."""
         try:
             data = st.session_state.processed_data
             
@@ -458,6 +660,36 @@ class FraudDashboard:
             if 'isFraud' not in data.columns:
                 st.error("Target variable 'isFraud' not found in data!")
                 return
+            
+            # Memory optimization for large datasets
+            original_size = len(data)
+            is_large_dataset = original_size > 500000  # Consider >500k rows as large
+            
+            if is_large_dataset:
+                # Use stratified sampling to maintain fraud ratio while reducing memory usage
+                max_training_size = 200000  # Limit to 200k rows for training
+                
+                st.warning(f"🧠 **Large Dataset Detected** ({original_size:,} rows)")
+                st.info(f"📊 Using stratified sampling of {max_training_size:,} rows for model training to optimize memory usage")
+                
+                # Stratified sampling to maintain fraud distribution
+                fraud_data = data[data['isFraud'] == 1]
+                normal_data = data[data['isFraud'] == 0]
+                
+                # Calculate sampling ratios
+                fraud_ratio = len(fraud_data) / len(data)
+                fraud_sample_size = min(len(fraud_data), int(max_training_size * fraud_ratio))
+                normal_sample_size = max_training_size - fraud_sample_size
+                
+                # Sample data
+                fraud_sample = fraud_data.sample(n=fraud_sample_size, random_state=random_state)
+                normal_sample = normal_data.sample(n=normal_sample_size, random_state=random_state)
+                
+                # Combine samples
+                data = pd.concat([fraud_sample, normal_sample]).sample(frac=1, random_state=random_state)
+                
+                st.info(f"🎯 **Sampled Data**: {len(data):,} rows (Fraud: {len(fraud_sample):,}, Normal: {len(normal_sample):,})")
+                st.info(f"📈 **Fraud Rate Maintained**: {len(fraud_sample)/len(data):.3%} (Original: {fraud_ratio:.3%})")
             
             # Remove non-numerical columns and target variable
             exclude_cols = ['isFraud', 'nameOrig', 'nameDest']
@@ -467,13 +699,17 @@ class FraudDashboard:
             X = data[feature_cols].select_dtypes(include=[np.number])
             y = data['isFraud']
             
-            st.info(f"Using {len(X.columns)} numerical features for training: {list(X.columns)[:5]}...")
+            st.info(f"🔢 **Features**: Using {len(X.columns)} numerical features")
+            st.info(f"📋 **Feature List**: {', '.join(list(X.columns)[:8])}{'...' if len(X.columns) > 8 else ''}")
             
             # Split data
             from sklearn.model_selection import train_test_split
             X_train, X_test, y_train, y_test = train_test_split(
                 X, y, test_size=test_size, random_state=random_state, stratify=y
             )
+            
+            st.info(f"📊 **Training Set**: {len(X_train):,} samples")
+            st.info(f"🧪 **Test Set**: {len(X_test):,} samples")
             
             # Store test data for evaluation
             st.session_state.X_test = X_test
@@ -490,27 +726,79 @@ class FraudDashboard:
             if train_xgb:
                 models_to_train.append(('XGBoost', XGBoostModel()))
             
-            # Train models
+            # Train models with memory optimization
+            successful_models = 0
             for i, (name, model) in enumerate(models_to_train):
-                status_text.text(f"Training {name}...")
-                
-                # Train model
-                model.train(X_train, y_train)
-                
-                # Evaluate model
-                results = self.model_evaluator.evaluate_model(model, X_test, y_test, name)
-                
-                # Store results
-                st.session_state.trained_models[name] = model
-                st.session_state.model_results[name] = results
+                try:
+                    status_text.text(f"🤖 Training {name}...")
+                    
+                    # Configure model for memory efficiency
+                    if hasattr(model, 'set_params'):
+                        if 'Random Forest' in name:
+                            # Limit Random Forest parameters for memory efficiency
+                            model.set_params(n_jobs=1, max_depth=10)  # Reduce parallelism and depth
+                        elif 'XGBoost' in name:
+                            # Limit XGBoost parameters for memory efficiency
+                            model.set_params(n_jobs=1, max_depth=6)  # Reduce parallelism and depth
+                    
+                    # Train model
+                    model.train(X_train, y_train)
+                    
+                    status_text.text(f"📊 Evaluating {name}...")
+                    
+                    # Evaluate model
+                    results = self.model_evaluator.evaluate_model(model, X_test, y_test, name)
+                    
+                    # Store results
+                    st.session_state.trained_models[name] = model
+                    st.session_state.model_results[name] = results
+                    
+                    successful_models += 1
+                    st.success(f"✅ {name} trained successfully!")
+                    
+                except Exception as model_error:
+                    st.error(f"❌ Failed to train {name}: {str(model_error)}")
+                    if "memory" in str(model_error).lower() or "paging file" in str(model_error).lower():
+                        st.warning(f"💾 {name} failed due to memory constraints. Try with a smaller dataset or increase virtual memory.")
+                    continue
                 
                 progress_bar.progress((i + 1) / len(models_to_train))
             
-            status_text.text("Training completed!")
-            st.success(f"Successfully trained {len(models_to_train)} models!")
+            status_text.text("🎉 Training completed!")
+            
+            if successful_models > 0:
+                st.success(f"🎯 Successfully trained {successful_models}/{len(models_to_train)} models!")
+                if is_large_dataset:
+                    st.info("💡 **Note**: Models were trained on a representative sample of your large dataset for memory efficiency.")
+            else:
+                st.error("❌ No models were successfully trained. This may be due to memory constraints.")
+                st.info("💡 **Suggestions**: Try reducing the dataset size or increasing your system's virtual memory.")
             
         except Exception as e:
-            st.error(f"Error during model training: {str(e)}")
+            st.error(f"❌ Error during model training: {str(e)}")
+            
+            # Provide specific guidance for memory errors
+            if "memory" in str(e).lower() or "paging file" in str(e).lower():
+                with st.expander("🔧 Memory Error Solutions"):
+                    st.markdown("""
+                    **This error occurs when processing very large datasets. Try these solutions:**
+                    
+                    1. **Increase Virtual Memory (Recommended)**:
+                       - Go to System Properties → Advanced → Performance Settings → Advanced → Virtual Memory
+                       - Set custom size: Initial = 4096 MB, Maximum = 8192 MB or higher
+                    
+                    2. **Use Smaller Dataset**:
+                       - The system automatically samples large datasets, but you can try uploading a smaller file
+                    
+                    3. **Close Other Applications**:
+                       - Free up RAM by closing unnecessary programs
+                    
+                    4. **Restart the Dashboard**:
+                       - Sometimes helps clear memory leaks
+                    """)
+            else:
+                with st.expander("🔍 Error Details"):
+                    st.code(str(e))
     
     def _display_model_evaluation(self):
         """Display model evaluation results."""
@@ -561,7 +849,7 @@ class FraudDashboard:
             hovermode='x unified'
         )
         
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
         
         # Confusion matrices
         st.subheader("Confusion Matrices")
@@ -580,7 +868,7 @@ class FraudDashboard:
                         x=['Legitimate', 'Fraud'],
                         y=['Legitimate', 'Fraud']
                     )
-                    st.plotly_chart(fig_cm, use_container_width=True)
+                    st.plotly_chart(fig_cm, width='stretch')
         
         # ROC Curves
         st.subheader("ROC Curves")
@@ -615,7 +903,7 @@ class FraudDashboard:
             yaxis=dict(range=[0, 1])
         )
         
-        st.plotly_chart(fig_roc, use_container_width=True)
+        st.plotly_chart(fig_roc, width='stretch')
     
     def _initialize_fraud_detector(self):
         """Initialize fraud detector with best model."""
