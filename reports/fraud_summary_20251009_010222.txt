@@ -1,0 +1,5 @@
+PDF Report Simulation: Fraud Detection Summary Report
+Generated: 2025-10-09 01:02:22.426078
+Type: fraud_summary
+
+Note: This is a simulation. Install reportlab for actual PDF generation.
