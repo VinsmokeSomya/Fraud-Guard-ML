@@ -176,6 +176,11 @@
     - _Requirements: 4.1, 4.2_
   
   - [ ] 6.2 Build ModelVisualizer class for performance charts
+
+
+
+
+
     - Generate ROC curves and precision-recall curves
     - Create confusion matrix heatmaps with annotations
     - Implement feature importance bar charts and SHAP plots
