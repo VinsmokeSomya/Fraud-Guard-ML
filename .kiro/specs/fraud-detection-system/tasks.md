@@ -213,7 +213,11 @@
     - Create fraud explanation and risk factor identification
     - _Requirements: 6.2, 5.1_
   
-  - [ ] 7.2 Build FastAPI endpoints for fraud detection
+  - [x] 7.2 Build FastAPI endpoints for fraud detection
+
+
+
+
     - Create POST endpoint for single transaction scoring
     - Add batch prediction endpoint for multiple transactions
     - Implement model health check and status endpoints
