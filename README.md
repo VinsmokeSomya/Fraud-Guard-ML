@@ -31,7 +31,7 @@ A comprehensive machine learning-powered fraud detection system for financial tr
 
 ```bash
 # Clone the repository
-git clone <repository-url>
+git clone https://github.com/VinsmokeSomya/Fraud-Guard-ML.git
 cd fraud-guard-ml
 
 # Run the automated setup script (creates virtual environment and installs dependencies)
