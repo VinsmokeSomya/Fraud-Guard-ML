@@ -1,4 +1,13 @@
-# Fraud Guard ML 🛡️
+<div align="center">
+  🚩🧡🕉️ || जय श्री राम || 🕉️🧡🚩
+</div>
+
+---
+<div align="center">
+  <h1 style="border-bottom: none;">
+    Fraud Guard ML 🛡️
+  </h1>
+</div>
 
 A comprehensive machine learning-powered fraud detection system for financial transactions. This system analyzes transaction patterns to identify fraudulent activities using multiple ML algorithms and provides real-time fraud scoring capabilities.
 
