@@ -12,14 +12,20 @@ A comprehensive machine learning-powered fraud detection system for financial tr
 
 ## 🚀 Quick Start
 
+### Prerequisites
+
+- Python 3.8 or higher
+- 8GB+ RAM (recommended for large datasets)
+- 2GB+ free disk space
+
 ### 1. Environment Setup
 
 ```bash
 # Clone the repository
-git clone https://github.com/VinsmokeSomya/Fraud-Guard-ML.git
-cd Fraud-Guard-ML
+git clone <repository-url>
+cd fraud-guard-ml
 
-# Run the automated setup script
+# Run the automated setup script (creates virtual environment and installs dependencies)
 python setup_env.py
 
 # Activate virtual environment
@@ -27,31 +33,64 @@ python setup_env.py
 .venv\Scripts\activate
 # Unix/Linux/MacOS:
 source .venv/bin/activate
+
+# Verify installation
+python -c "import pandas, sklearn, xgboost, streamlit, fastapi; print('All dependencies installed successfully!')"
 ```
 
 ### 2. Data Preparation
 
 ```bash
 # Place your fraud dataset in the data directory
+# The system expects a CSV file with transaction data
 cp /path/to/your/Fraud.csv data/raw/
 
-# Update configuration
+# For demo purposes, you can download the sample dataset:
+# https://www.kaggle.com/datasets/mlg-ulb/creditcardfraud
+# Or use the synthetic fraud dataset generator (see examples/)
+
+# Update configuration (optional)
 cp .env.example .env
-# Edit .env with your specific settings
+# Edit .env with your specific settings if needed
 ```
 
 ### 3. Run the System
 
+Choose your preferred interface:
+
+#### Option A: Interactive Dashboard (Recommended for beginners)
 ```bash
-# Start Jupyter for exploration
+# Start the Streamlit dashboard
+streamlit run run_dashboard.py
+
+# Open browser to: http://localhost:8501
+# Follow the guided workflow in the dashboard
+```
+
+#### Option B: API Service (For integration and production)
+```bash
+# Start the FastAPI service
+python run_api.py
+
+# API available at: http://localhost:8000
+# Interactive docs at: http://localhost:8000/docs
+```
+
+#### Option C: Jupyter Notebooks (For data scientists)
+```bash
+# Start Jupyter for exploration and experimentation
 jupyter notebook
 
-# Or run the Streamlit dashboard
-streamlit run src/dashboard/app.py
-
-# Or start the API service
-uvicorn src.api.main:app --reload
+# Navigate to examples/ folder for sample notebooks
 ```
+
+### 4. First Steps
+
+1. **Load Data**: Use the dashboard to upload your fraud dataset
+2. **Explore Data**: Review transaction patterns and fraud statistics  
+3. **Train Models**: Train multiple ML models (Logistic Regression, Random Forest, XGBoost)
+4. **Evaluate Performance**: Compare model accuracy and performance metrics
+5. **Detect Fraud**: Use real-time fraud detection on new transactions
 
 ## 📊 Dataset
 
@@ -169,28 +208,78 @@ docker run -p 8000:8000 fraud-guard-ml
 
 ## 📝 API Documentation
 
-Once the API is running, visit:
-- **Swagger UI**: http://localhost:8000/docs
-- **ReDoc**: http://localhost:8000/redoc
+The system provides a comprehensive REST API for fraud detection integration.
 
-### Example API Usage
+### API Access
+- **Base URL**: http://localhost:8000
+- **Interactive Docs**: http://localhost:8000/docs (Swagger UI)
+- **Alternative Docs**: http://localhost:8000/redoc (ReDoc)
+- **Health Check**: http://localhost:8000/health
 
+### Quick API Examples
+
+#### Single Transaction Scoring
 ```python
 import requests
 
 # Score a single transaction
 response = requests.post("http://localhost:8000/predict", json={
     "step": 1,
-    "type": "TRANSFER",
+    "type": "TRANSFER", 
     "amount": 250000.0,
+    "nameOrig": "C1231006815",
     "oldbalanceOrg": 500000.0,
     "newbalanceOrig": 250000.0,
+    "nameDest": "C1666544295", 
     "oldbalanceDest": 0.0,
     "newbalanceDest": 250000.0
 })
 
-fraud_score = response.json()["fraud_probability"]
+result = response.json()
+print(f"Fraud Score: {result['fraud_score']}")
+print(f"Risk Level: {result['risk_level']}")
 ```
+
+#### Detailed Fraud Analysis
+```python
+# Get detailed explanation
+response = requests.post("http://localhost:8000/predict/explain", json={
+    # ... same transaction data ...
+})
+
+explanation = response.json()
+print(f"Risk Factors: {explanation['risk_factors']}")
+print(f"Recommendations: {explanation['recommendations']}")
+```
+
+#### Batch Processing
+```python
+# Process multiple transactions
+response = requests.post("http://localhost:8000/predict/batch", json={
+    "transactions": [
+        {
+            "step": 1,
+            "type": "PAYMENT",
+            "amount": 9839.64,
+            # ... other fields ...
+        },
+        {
+            "step": 2, 
+            "type": "TRANSFER",
+            "amount": 181.0,
+            # ... other fields ...
+        }
+    ]
+})
+
+batch_results = response.json()
+print(f"Total: {batch_results['total_transactions']}")
+print(f"Fraud Detected: {batch_results['fraud_detected']}")
+```
+
+📖 **Complete Documentation Available:**
+- **[API Guide](docs/API_GUIDE.md)**: Comprehensive REST API documentation
+- **[User Guide](docs/USER_GUIDE.md)**: Complete dashboard and reporting guide
 
 ## 🤝 Contributing
 
@@ -204,12 +293,39 @@ fraud_score = response.json()["fraud_probability"]
 
 This project is licensed under the MIT License - see the LICENSE file for details.
 
+## 📚 Documentation
+
+### 🎯 **[Complete Documentation Hub](docs/README.md)** ← **START HERE**
+
+### Essential Guides
+
+| Guide | Purpose | Audience |
+|-------|---------|----------|
+| **[📖 User Guide](docs/USER_GUIDE.md)** | Dashboard, training, reporting | All Users |
+| **[🔧 API Guide](docs/API_GUIDE.md)** | REST API integration | Developers |
+| **[⚙️ Configuration](docs/CONFIGURATION_AND_LOGGING.md)** | System setup | Administrators |
+| **[🚀 Deployment](docs/MODEL_DEPLOYMENT.md)** | Production deployment | DevOps |
+
+### Interactive Documentation
+
+- **API Documentation**: http://localhost:8000/docs (when API is running)
+- **Alternative API Docs**: http://localhost:8000/redoc
+- **Test API Documentation**: `python test_api_docs.py`
+
+### Project Specifications
+
+- **[📋 Requirements](.kiro/specs/fraud-detection-system/requirements.md)**: Detailed system requirements
+- **[🏗️ Design](.kiro/specs/fraud-detection-system/design.md)**: System architecture and design  
+- **[✅ Tasks](.kiro/specs/fraud-detection-system/tasks.md)**: Implementation task list
+
 ## 🆘 Support
 
 For questions or issues:
-1. Check the implementation tasks in `.kiro/specs/fraud-detection-system/`
-2. Review the design document for architecture details
-3. Open an issue on GitHub
+1. **Check Documentation**: Review the comprehensive guides above
+2. **API Issues**: See [API Guide](docs/API_GUIDE.md) troubleshooting section
+3. **Dashboard Issues**: See [User Guide](docs/USER_GUIDE.md) troubleshooting section
+4. **System Architecture**: Review the [design document](.kiro/specs/fraud-detection-system/design.md)
+5. **Implementation Details**: Check [tasks](.kiro/specs/fraud-detection-system/tasks.md) and requirements
 
 ---
 

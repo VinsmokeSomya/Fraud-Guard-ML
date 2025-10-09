@@ -25,10 +25,48 @@ logger = get_logger(__name__)
 # Initialize FastAPI app
 app = FastAPI(
     title="Fraud Detection API",
-    description="REST API for real-time fraud detection and risk assessment",
+    description="""
+    ## Fraud Detection REST API
+    
+    A comprehensive REST API for real-time fraud detection and risk assessment of financial transactions.
+    
+    ### Features
+    - **Real-time Scoring**: Score individual transactions for fraud risk
+    - **Batch Processing**: Process multiple transactions simultaneously  
+    - **Detailed Explanations**: Get comprehensive fraud analysis with risk factors
+    - **Alert Management**: Manage fraud alerts and notifications
+    - **Health Monitoring**: Service health checks and status monitoring
+    - **Configurable Thresholds**: Adjust fraud detection sensitivity
+    
+    ### Quick Start
+    1. Check service health: `GET /health`
+    2. Score a transaction: `POST /predict`
+    3. Get detailed analysis: `POST /predict/explain`
+    4. Process multiple transactions: `POST /predict/batch`
+    
+    ### Transaction Types
+    - **CASH-IN**: Cash deposit to account
+    - **CASH-OUT**: Cash withdrawal from account
+    - **DEBIT**: Debit card transaction
+    - **PAYMENT**: Payment to merchant
+    - **TRANSFER**: Transfer between accounts
+    
+    ### Risk Levels
+    - **LOW**: fraud_score < 0.5 (default threshold)
+    - **MEDIUM**: 0.5 ≤ fraud_score < 0.8 (default thresholds)
+    - **HIGH**: fraud_score ≥ 0.8 (default threshold)
+    """,
     version="1.0.0",
     docs_url="/docs",
-    redoc_url="/redoc"
+    redoc_url="/redoc",
+    contact={
+        "name": "Fraud Detection System",
+        "url": "https://github.com/your-repo/fraud-detection",
+    },
+    license_info={
+        "name": "MIT License",
+        "url": "https://opensource.org/licenses/MIT",
+    },
 )
 
 # Global fraud detector and alert manager instances
@@ -38,16 +76,31 @@ alert_manager: Optional[AlertManager] = None
 
 # Pydantic models for request/response validation
 class TransactionRequest(BaseModel):
-    """Single transaction request model."""
-    step: int = Field(..., ge=0, description="Time step (0-744)")
-    type: str = Field(..., description="Transaction type (CASH-IN, CASH-OUT, DEBIT, PAYMENT, TRANSFER)")
-    amount: float = Field(..., ge=0, description="Transaction amount")
-    nameOrig: str = Field(..., description="Origin customer ID")
-    oldbalanceOrg: float = Field(..., ge=0, description="Origin balance before transaction")
-    newbalanceOrig: float = Field(..., ge=0, description="Origin balance after transaction")
-    nameDest: str = Field(..., description="Destination customer ID")
-    oldbalanceDest: float = Field(..., ge=0, description="Destination balance before transaction")
-    newbalanceDest: float = Field(..., ge=0, description="Destination balance after transaction")
+    """Single transaction request model with example data."""
+    step: int = Field(..., ge=0, description="Time step (0-744)", example=1)
+    type: str = Field(..., description="Transaction type (CASH-IN, CASH-OUT, DEBIT, PAYMENT, TRANSFER)", example="TRANSFER")
+    amount: float = Field(..., ge=0, description="Transaction amount", example=181.0)
+    nameOrig: str = Field(..., description="Origin customer ID", example="C1231006815")
+    oldbalanceOrg: float = Field(..., ge=0, description="Origin balance before transaction", example=181.0)
+    newbalanceOrig: float = Field(..., ge=0, description="Origin balance after transaction", example=0.0)
+    nameDest: str = Field(..., description="Destination customer ID", example="C1666544295")
+    oldbalanceDest: float = Field(..., ge=0, description="Destination balance before transaction", example=0.0)
+    newbalanceDest: float = Field(..., ge=0, description="Destination balance after transaction", example=0.0)
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "step": 1,
+                "type": "TRANSFER",
+                "amount": 181.0,
+                "nameOrig": "C1231006815",
+                "oldbalanceOrg": 181.0,
+                "newbalanceOrig": 0.0,
+                "nameDest": "C1666544295",
+                "oldbalanceDest": 0.0,
+                "newbalanceDest": 0.0
+            }
+        }
     
     @validator('type')
     def validate_transaction_type(cls, v):
