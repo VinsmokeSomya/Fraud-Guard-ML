@@ -1,0 +1,45 @@
+# Development Environment Deployment Configuration
+environment: development
+deployment_name: fraud-detection-dev
+api_endpoint: http://localhost:8000
+
+# Resource limits for development
+resource_limits:
+  cpu: "500m"
+  memory: "1Gi"
+  gpu: 0
+
+# Environment variables
+environment_variables:
+  ENVIRONMENT: development
+  LOG_LEVEL: DEBUG
+  API_HOST: "0.0.0.0"
+  API_PORT: "8000"
+  MODEL_CACHE_SIZE: "100"
+  PREDICTION_TIMEOUT: "5"
+
+# Scaling configuration
+scaling_config:
+  min_replicas: 1
+  max_replicas: 1
+  target_cpu_utilization: 80
+
+# Monitoring configuration
+monitoring_config:
+  health_check_interval: 30
+  metrics_collection: true
+  log_level: DEBUG
+  enable_profiling: true
+
+# Rollback configuration
+rollback_config:
+  enabled: true
+  failure_threshold: 5
+  rollback_timeout: 300
+
+# Development-specific settings
+development_settings:
+  auto_reload: true
+  debug_mode: true
+  mock_external_services: true
+  enable_test_endpoints: true

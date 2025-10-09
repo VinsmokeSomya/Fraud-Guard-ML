@@ -1,0 +1,59 @@
+# Staging Environment Deployment Configuration
+environment: staging
+deployment_name: fraud-detection-staging
+api_endpoint: http://staging-api.fraud-detection.local:8000
+
+# Resource limits for staging
+resource_limits:
+  cpu: "1000m"
+  memory: "2Gi"
+  gpu: 0
+
+# Environment variables
+environment_variables:
+  ENVIRONMENT: staging
+  LOG_LEVEL: INFO
+  API_HOST: "0.0.0.0"
+  API_PORT: "8000"
+  MODEL_CACHE_SIZE: "500"
+  PREDICTION_TIMEOUT: "3"
+  ENABLE_METRICS: "true"
+
+# Scaling configuration
+scaling_config:
+  min_replicas: 2
+  max_replicas: 4
+  target_cpu_utilization: 70
+
+# Monitoring configuration
+monitoring_config:
+  health_check_interval: 30
+  metrics_collection: true
+  log_level: INFO
+  enable_profiling: false
+  alert_thresholds:
+    error_rate: 0.05
+    response_time_p95: 1000
+    cpu_utilization: 80
+    memory_utilization: 85
+
+# Rollback configuration
+rollback_config:
+  enabled: true
+  failure_threshold: 3
+  rollback_timeout: 300
+
+# Load balancing
+load_balancing:
+  strategy: round_robin
+  health_check_path: /health
+  timeout: 30
+
+# Security settings
+security:
+  enable_rate_limiting: true
+  rate_limit_requests_per_minute: 1000
+  enable_cors: true
+  allowed_origins:
+    - "http://staging-dashboard.fraud-detection.local"
+    - "http://localhost:3000"

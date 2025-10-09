@@ -1,0 +1,96 @@
+# Production Environment Deployment Configuration
+environment: production
+deployment_name: fraud-detection-prod
+api_endpoint: https://api.fraud-detection.com
+
+# Resource limits for production
+resource_limits:
+  cpu: "2000m"
+  memory: "4Gi"
+  gpu: 1
+
+# Environment variables
+environment_variables:
+  ENVIRONMENT: production
+  LOG_LEVEL: WARNING
+  API_HOST: "0.0.0.0"
+  API_PORT: "8000"
+  MODEL_CACHE_SIZE: "1000"
+  PREDICTION_TIMEOUT: "2"
+  ENABLE_METRICS: "true"
+  ENABLE_TRACING: "true"
+
+# Scaling configuration
+scaling_config:
+  min_replicas: 3
+  max_replicas: 10
+  target_cpu_utilization: 60
+  scale_up_cooldown: 300
+  scale_down_cooldown: 600
+
+# Monitoring configuration
+monitoring_config:
+  health_check_interval: 15
+  metrics_collection: true
+  log_level: WARNING
+  enable_profiling: false
+  structured_logging: true
+  alert_thresholds:
+    error_rate: 0.01
+    response_time_p95: 500
+    response_time_p99: 1000
+    cpu_utilization: 70
+    memory_utilization: 80
+    disk_utilization: 85
+
+# Rollback configuration
+rollback_config:
+  enabled: true
+  failure_threshold: 2
+  rollback_timeout: 180
+  canary_deployment: true
+  canary_percentage: 10
+
+# Load balancing
+load_balancing:
+  strategy: least_connections
+  health_check_path: /health
+  timeout: 10
+  sticky_sessions: false
+
+# Security settings
+security:
+  enable_rate_limiting: true
+  rate_limit_requests_per_minute: 10000
+  enable_cors: false
+  enable_https_only: true
+  enable_api_key_auth: true
+  enable_request_signing: true
+  allowed_origins: []
+
+# High availability
+high_availability:
+  multi_zone_deployment: true
+  backup_replicas: 1
+  disaster_recovery_enabled: true
+  cross_region_replication: false
+
+# Performance optimization
+performance:
+  enable_caching: true
+  cache_ttl_seconds: 300
+  enable_compression: true
+  enable_connection_pooling: true
+  max_connections: 1000
+  connection_timeout: 30
+
+# Compliance and auditing
+compliance:
+  enable_audit_logging: true
+  data_retention_days: 90
+  enable_encryption_at_rest: true
+  enable_encryption_in_transit: true
+  compliance_standards:
+    - "PCI-DSS"
+    - "SOX"
+    - "GDPR"
