@@ -1,0 +1,101 @@
+# Production Environment Configuration
+environment: production
+debug: false
+
+# Logging Configuration
+logging:
+  level: WARNING
+  format: "structured"
+  enable_correlation_ids: true
+  enable_performance_logging: true
+  log_to_file: true
+  log_to_console: false
+  rotation: "100 MB"
+  retention: "90 days"
+  structured_logging: true
+  log_aggregation_endpoint: "${LOG_AGGREGATION_ENDPOINT}"
+
+# API Configuration
+api:
+  host: "0.0.0.0"
+  port: 8000
+  debug: false
+  reload: false
+  workers: 4
+  timeout: 10
+  enable_cors: false
+  cors_origins: []
+
+# Database Configuration
+database:
+  url: "${DATABASE_URL}"
+  echo: false
+  pool_size: 20
+  max_overflow: 40
+  pool_timeout: 30
+  pool_recycle: 3600
+
+# Model Configuration
+models:
+  cache_size: 1000
+  prediction_timeout: 2
+  enable_model_monitoring: true
+  monitoring_interval: 60  # 1 minute
+  drift_detection_threshold: 0.05
+  performance_degradation_threshold: 0.02
+
+# Performance Monitoring
+monitoring:
+  enable_metrics_collection: true
+  metrics_interval: 15  # seconds
+  enable_profiling: false
+  enable_tracing: true
+  trace_sampling_rate: 0.01
+  metrics_retention_days: 90
+  prometheus_endpoint: "${PROMETHEUS_ENDPOINT}"
+  
+# Alert Configuration
+alerts:
+  enable_alerts: true
+  fraud_threshold: 0.9
+  performance_threshold: 0.8
+  email_notifications: true
+  slack_notifications: true
+  pagerduty_notifications: true
+  alert_cooldown_minutes: 5
+
+# Security Configuration
+security:
+  enable_rate_limiting: true
+  rate_limit_per_minute: 10000
+  enable_authentication: true
+  enable_encryption: true
+  jwt_secret_key: "${JWT_SECRET_KEY}"
+  jwt_expiration_hours: 8
+  enable_api_key_auth: true
+  enable_request_signing: true
+
+# High Availability
+high_availability:
+  enable_health_checks: true
+  health_check_interval: 10
+  enable_circuit_breaker: true
+  circuit_breaker_threshold: 5
+  enable_retry_logic: true
+  max_retries: 3
+
+# Compliance
+compliance:
+  enable_audit_logging: true
+  data_retention_days: 2555  # 7 years
+  enable_encryption_at_rest: true
+  enable_encryption_in_transit: true
+  pci_compliance_mode: true
+
+# Feature Flags
+features:
+  enable_batch_processing: true
+  enable_real_time_scoring: true
+  enable_model_explanations: false  # Disabled for performance
+  enable_audit_logging: true
+  enable_data_validation: true

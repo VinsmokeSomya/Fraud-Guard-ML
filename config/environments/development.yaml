@@ -1,0 +1,76 @@
+# Development Environment Configuration
+environment: development
+debug: true
+
+# Logging Configuration
+logging:
+  level: DEBUG
+  format: "detailed"
+  enable_correlation_ids: true
+  enable_performance_logging: true
+  log_to_file: true
+  log_to_console: true
+  rotation: "10 MB"
+  retention: "7 days"
+  structured_logging: true
+
+# API Configuration
+api:
+  host: "0.0.0.0"
+  port: 8000
+  debug: true
+  reload: true
+  workers: 1
+  timeout: 30
+  enable_cors: true
+  cors_origins:
+    - "http://localhost:3000"
+    - "http://localhost:8501"
+
+# Database Configuration
+database:
+  url: "sqlite:///./fraud_detection_dev.db"
+  echo: true
+  pool_size: 5
+  max_overflow: 10
+
+# Model Configuration
+models:
+  cache_size: 100
+  prediction_timeout: 10
+  enable_model_monitoring: true
+  monitoring_interval: 300  # 5 minutes
+  drift_detection_threshold: 0.1
+  performance_degradation_threshold: 0.05
+
+# Performance Monitoring
+monitoring:
+  enable_metrics_collection: true
+  metrics_interval: 60  # seconds
+  enable_profiling: true
+  enable_tracing: true
+  trace_sampling_rate: 1.0
+  metrics_retention_days: 7
+  
+# Alert Configuration
+alerts:
+  enable_alerts: true
+  fraud_threshold: 0.8
+  performance_threshold: 0.7
+  email_notifications: false
+  slack_notifications: false
+
+# Security Configuration
+security:
+  enable_rate_limiting: false
+  rate_limit_per_minute: 1000
+  enable_authentication: false
+  enable_encryption: false
+
+# Feature Flags
+features:
+  enable_batch_processing: true
+  enable_real_time_scoring: true
+  enable_model_explanations: true
+  enable_audit_logging: true
+  enable_data_validation: true

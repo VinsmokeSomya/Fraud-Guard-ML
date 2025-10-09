@@ -19,6 +19,8 @@ from src.visualization.fraud_pattern_analyzer import FraudPatternAnalyzer
 from src.services.model_monitor import ModelMonitor
 from src.services.decision_logger import DecisionLogger
 from src.utils.config import get_setting, get_logger
+from src.utils.performance_metrics import time_operation, record_metric, increment_counter
+from config.logging_config import get_correlation_id
 
 logger = get_logger(__name__)
 
@@ -114,68 +116,103 @@ class FraudDetector:
         if self.model is None:
             raise ValueError("No model loaded for fraud detection")
         
-        start_time = datetime.now()
-        
-        # Convert transaction to DataFrame format expected by model
-        transaction_df = self._prepare_transaction_data([transaction])
-        
-        # Get model prediction probability
-        try:
-            fraud_probabilities = self.model.predict_proba(transaction_df)
-            predictions = self.model.predict(transaction_df)
+        # Start performance tracking
+        with time_operation("fraud_scoring", {"transaction_type": transaction.get("type", "unknown")}):
+            start_time = datetime.now()
+            correlation_id = get_correlation_id()
             
-            # Handle different probability output formats
-            if fraud_probabilities.ndim == 1:
-                fraud_score = fraud_probabilities[0]
-            else:
-                fraud_score = fraud_probabilities[0, 1]  # Probability of fraud class
+            logger.info(
+                "Starting fraud scoring for transaction",
+                extra={
+                    "transaction_id": transaction.get("transaction_id"),
+                    "transaction_type": transaction.get("type"),
+                    "amount": transaction.get("amount"),
+                    "correlation_id": correlation_id
+                }
+            )
             
-            prediction = int(predictions[0])
-            confidence = self._calculate_confidence(fraud_score)
+            # Convert transaction to DataFrame format expected by model
+            transaction_df = self._prepare_transaction_data([transaction])
             
-            # Calculate processing time
-            processing_time_ms = (datetime.now() - start_time).total_seconds() * 1000
-            
-            logger.debug(f"Transaction scored with fraud probability: {fraud_score}")
-            
-            # Get model information for logging
-            model_info = {
-                'name': getattr(self.model, 'model_name', 'unknown'),
-                'version': getattr(self.model, 'model_version', 'unknown'),
-                'threshold': self.risk_threshold
-            }
-            
-            # Get risk factors and explanation if enabled
-            risk_factors = None
-            explanation = None
-            recommendations = None
-            
-            if self.enable_explanations:
-                explanation_data = self.get_fraud_explanation(transaction, fraud_score)
-                risk_factors = explanation_data.get('risk_factors', {})
-                explanation = explanation_data.get('explanation_text', '')
-                recommendations = explanation_data.get('recommendations', [])
-            
-            # Log the decision
-            if self.decision_logger:
-                try:
-                    decision_id = self.decision_logger.log_fraud_decision(
-                        transaction_data=transaction,
-                        fraud_score=fraud_score,
-                        prediction=prediction,
-                        confidence=confidence,
-                        model_info=model_info,
-                        risk_factors=risk_factors,
-                        explanation=explanation,
-                        recommendations=recommendations,
-                        processing_time_ms=processing_time_ms,
-                        context=context
-                    )
-                    logger.debug(f"Decision logged with ID: {decision_id}")
-                except Exception as e:
-                    logger.error(f"Error logging decision: {e}")
-            
-            # Log prediction for monitoring
+            # Get model prediction probability
+            try:
+                with time_operation("model_prediction"):
+                    fraud_probabilities = self.model.predict_proba(transaction_df)
+                    predictions = self.model.predict(transaction_df)
+                
+                # Handle different probability output formats
+                if fraud_probabilities.ndim == 1:
+                    fraud_score = fraud_probabilities[0]
+                else:
+                    fraud_score = fraud_probabilities[0, 1]  # Probability of fraud class
+                
+                prediction = int(predictions[0])
+                confidence = self._calculate_confidence(fraud_score)
+                
+                # Calculate processing time
+                processing_time_ms = (datetime.now() - start_time).total_seconds() * 1000
+                
+                # Record performance metrics
+                record_metric("fraud_score", fraud_score, "probability")
+                record_metric("processing_time_ms", processing_time_ms, "milliseconds")
+                increment_counter("transactions_scored", 1, {"type": transaction.get("type", "unknown")})
+                
+                if fraud_score > self.risk_threshold:
+                    increment_counter("fraud_detected", 1)
+                    if fraud_score > self.high_risk_threshold:
+                        increment_counter("high_risk_fraud_detected", 1)
+                
+                logger.info(
+                    f"Transaction scored successfully",
+                    extra={
+                        "fraud_score": fraud_score,
+                        "prediction": prediction,
+                        "confidence": confidence,
+                        "processing_time_ms": processing_time_ms,
+                        "is_fraud": fraud_score > self.risk_threshold
+                    }
+                )
+                
+                # Get model information for logging
+                model_info = {
+                    'name': getattr(self.model, 'model_name', 'unknown'),
+                    'version': getattr(self.model, 'model_version', 'unknown'),
+                    'threshold': self.risk_threshold
+                }
+                
+                # Get risk factors and explanation if enabled
+                risk_factors = None
+                explanation = None
+                recommendations = None
+                
+                if self.enable_explanations:
+                    with time_operation("fraud_explanation"):
+                        explanation_data = self.get_fraud_explanation(transaction, fraud_score)
+                        risk_factors = explanation_data.get('risk_factors', {})
+                        explanation = explanation_data.get('explanation_text', '')
+                        recommendations = explanation_data.get('recommendations', [])
+                
+                # Log the decision
+                if self.decision_logger:
+                    try:
+                        decision_id = self.decision_logger.log_fraud_decision(
+                            transaction_data=transaction,
+                            fraud_score=fraud_score,
+                            prediction=prediction,
+                            confidence=confidence,
+                            model_info=model_info,
+                            risk_factors=risk_factors,
+                            explanation=explanation,
+                            recommendations=recommendations,
+                            processing_time_ms=processing_time_ms,
+                            context=context
+                        )
+                        logger.debug(f"Decision logged with ID: {decision_id}")
+                    except Exception as e:
+                        logger.error(f"Error logging decision: {e}")
+                        increment_counter("decision_logging_errors", 1)
+                
+                # Log prediction for monitoring
             if self.model_monitor:
                 try:
                     # Create DataFrame for monitoring

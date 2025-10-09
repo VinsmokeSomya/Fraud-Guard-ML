@@ -1,0 +1,79 @@
+# Staging Environment Configuration
+environment: staging
+debug: false
+
+# Logging Configuration
+logging:
+  level: INFO
+  format: "structured"
+  enable_correlation_ids: true
+  enable_performance_logging: true
+  log_to_file: true
+  log_to_console: true
+  rotation: "50 MB"
+  retention: "30 days"
+  structured_logging: true
+
+# API Configuration
+api:
+  host: "0.0.0.0"
+  port: 8000
+  debug: false
+  reload: false
+  workers: 2
+  timeout: 15
+  enable_cors: true
+  cors_origins:
+    - "https://staging-dashboard.fraud-detection.local"
+
+# Database Configuration
+database:
+  url: "postgresql://user:password@staging-db:5432/fraud_detection"
+  echo: false
+  pool_size: 10
+  max_overflow: 20
+  pool_timeout: 30
+
+# Model Configuration
+models:
+  cache_size: 500
+  prediction_timeout: 5
+  enable_model_monitoring: true
+  monitoring_interval: 180  # 3 minutes
+  drift_detection_threshold: 0.08
+  performance_degradation_threshold: 0.03
+
+# Performance Monitoring
+monitoring:
+  enable_metrics_collection: true
+  metrics_interval: 30  # seconds
+  enable_profiling: false
+  enable_tracing: true
+  trace_sampling_rate: 0.1
+  metrics_retention_days: 30
+  
+# Alert Configuration
+alerts:
+  enable_alerts: true
+  fraud_threshold: 0.8
+  performance_threshold: 0.75
+  email_notifications: true
+  slack_notifications: true
+  alert_cooldown_minutes: 15
+
+# Security Configuration
+security:
+  enable_rate_limiting: true
+  rate_limit_per_minute: 5000
+  enable_authentication: true
+  enable_encryption: true
+  jwt_secret_key: "${JWT_SECRET_KEY}"
+  jwt_expiration_hours: 24
+
+# Feature Flags
+features:
+  enable_batch_processing: true
+  enable_real_time_scoring: true
+  enable_model_explanations: true
+  enable_audit_logging: true
+  enable_data_validation: true

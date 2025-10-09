@@ -44,6 +44,7 @@ configparser>=5.2.0
 
 # Process Management
 supervisor>=4.2.0
+psutil>=5.9.0
 
 # Redis Support
 redis>=4.5.0

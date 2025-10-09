@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Dict, Any
 from config.settings import settings, config, load_config
 from config.logging_config import get_logger
+from src.utils.config_manager import config_manager
 
 # Initialize logger for this module
 logger = get_logger(__name__)
@@ -26,17 +27,8 @@ def get_setting(key: str, default: Any = None) -> Any:
     Returns:
         Configuration value or default
     """
-    try:
-        keys = key.split('.')
-        value = config
-        
-        for k in keys:
-            value = value[k]
-        
-        return value
-    except (KeyError, TypeError):
-        logger.warning(f"Configuration key '{key}' not found, using default: {default}")
-        return default
+    # Use the new config manager for better functionality
+    return config_manager.get_setting(key, default)
 
 
 def validate_paths() -> bool:
