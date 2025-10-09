@@ -1,0 +1,52 @@
+services:
+  # Development overrides for Fraud Detection API
+  fraud-api:
+    build:
+      target: development
+    environment:
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - LOG_LEVEL=DEBUG
+    volumes:
+      - .:/app
+      - /app/__pycache__
+      - /app/.pytest_cache
+    command: ["python", "run_api.py", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    ports:
+      - "8000:8000"
+      - "5678:5678"  # Debug port
+
+  # Development overrides for Dashboard
+  fraud-dashboard:
+    build:
+      target: development
+    environment:
+      - ENVIRONMENT=development
+      - DEBUG=true
+    volumes:
+      - .:/app
+      - /app/__pycache__
+    command: ["streamlit", "run", "run_dashboard.py", "--server.port=8501", "--server.address=0.0.0.0", "--server.runOnSave=true"]
+
+  # Jupyter notebook service for development
+  jupyter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: fraud-detection-jupyter
+    ports:
+      - "8888:8888"
+    environment:
+      - JUPYTER_ENABLE_LAB=yes
+    volumes:
+      - .:/app
+      - jupyter_data:/home/appuser/.jupyter
+    networks:
+      - fraud-detection-network
+    restart: unless-stopped
+    command: ["jupyter", "lab", "--ip=0.0.0.0", "--port=8888", "--no-browser", "--allow-root", "--NotebookApp.token=''", "--NotebookApp.password=''"]
+
+volumes:
+  jupyter_data:
+    driver: local
