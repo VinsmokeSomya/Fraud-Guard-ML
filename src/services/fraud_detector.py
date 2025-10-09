@@ -16,6 +16,8 @@ from pathlib import Path
 
 from src.models.base_model import FraudModelInterface
 from src.visualization.fraud_pattern_analyzer import FraudPatternAnalyzer
+from src.services.model_monitor import ModelMonitor
+from src.services.decision_logger import DecisionLogger
 from src.utils.config import get_setting, get_logger
 
 logger = get_logger(__name__)
@@ -34,7 +36,9 @@ class FraudDetector:
                  risk_threshold: float = 0.5,
                  high_risk_threshold: float = 0.8,
                  enable_explanations: bool = True,
-                 alert_manager: Optional['AlertManager'] = None):
+                 alert_manager: Optional['AlertManager'] = None,
+                 enable_monitoring: bool = True,
+                 enable_decision_logging: bool = True):
         """
         Initialize the FraudDetector service.
         
@@ -44,6 +48,8 @@ class FraudDetector:
             high_risk_threshold: Threshold for high-risk alerts
             enable_explanations: Whether to generate detailed fraud explanations
             alert_manager: AlertManager instance for handling alerts
+            enable_monitoring: Whether to enable model monitoring
+            enable_decision_logging: Whether to enable decision logging
         """
         self.model = model
         self.risk_threshold = risk_threshold
@@ -55,6 +61,10 @@ class FraudDetector:
         
         # Initialize fraud pattern analyzer for risk factor identification
         self.pattern_analyzer = FraudPatternAnalyzer()
+        
+        # Initialize monitoring and logging components
+        self.model_monitor = ModelMonitor(model=model) if enable_monitoring else None
+        self.decision_logger = DecisionLogger() if enable_decision_logging else None
         
         # Risk factor weights for explanation scoring
         self.risk_factor_weights = {
@@ -72,7 +82,9 @@ class FraudDetector:
         
         logger.info(f"FraudDetector initialized with risk_threshold={risk_threshold}, "
                    f"high_risk_threshold={high_risk_threshold}, "
-                   f"alert_manager={'enabled' if alert_manager else 'disabled'}")
+                   f"alert_manager={'enabled' if alert_manager else 'disabled'}, "
+                   f"monitoring={'enabled' if enable_monitoring else 'disabled'}, "
+                   f"decision_logging={'enabled' if enable_decision_logging else 'disabled'}")
     
     def load_model(self, model_path: str) -> None:
         """
@@ -88,12 +100,13 @@ class FraudDetector:
         # For now, we'll assume the model is already loaded
         logger.info(f"Model loading from {model_path} - implementation needed")
     
-    def score_transaction(self, transaction: Dict[str, Any]) -> float:
+    def score_transaction(self, transaction: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> float:
         """
         Score a single transaction for fraud risk.
         
         Args:
             transaction: Dictionary containing transaction data
+            context: Additional context for logging (user_id, session_id, etc.)
             
         Returns:
             Fraud risk score between 0 and 1
@@ -101,12 +114,15 @@ class FraudDetector:
         if self.model is None:
             raise ValueError("No model loaded for fraud detection")
         
+        start_time = datetime.now()
+        
         # Convert transaction to DataFrame format expected by model
         transaction_df = self._prepare_transaction_data([transaction])
         
         # Get model prediction probability
         try:
             fraud_probabilities = self.model.predict_proba(transaction_df)
+            predictions = self.model.predict(transaction_df)
             
             # Handle different probability output formats
             if fraud_probabilities.ndim == 1:
@@ -114,21 +130,80 @@ class FraudDetector:
             else:
                 fraud_score = fraud_probabilities[0, 1]  # Probability of fraud class
             
+            prediction = int(predictions[0])
+            confidence = self._calculate_confidence(fraud_score)
+            
+            # Calculate processing time
+            processing_time_ms = (datetime.now() - start_time).total_seconds() * 1000
+            
             logger.debug(f"Transaction scored with fraud probability: {fraud_score}")
+            
+            # Get model information for logging
+            model_info = {
+                'name': getattr(self.model, 'model_name', 'unknown'),
+                'version': getattr(self.model, 'model_version', 'unknown'),
+                'threshold': self.risk_threshold
+            }
+            
+            # Get risk factors and explanation if enabled
+            risk_factors = None
+            explanation = None
+            recommendations = None
+            
+            if self.enable_explanations:
+                explanation_data = self.get_fraud_explanation(transaction, fraud_score)
+                risk_factors = explanation_data.get('risk_factors', {})
+                explanation = explanation_data.get('explanation_text', '')
+                recommendations = explanation_data.get('recommendations', [])
+            
+            # Log the decision
+            if self.decision_logger:
+                try:
+                    decision_id = self.decision_logger.log_fraud_decision(
+                        transaction_data=transaction,
+                        fraud_score=fraud_score,
+                        prediction=prediction,
+                        confidence=confidence,
+                        model_info=model_info,
+                        risk_factors=risk_factors,
+                        explanation=explanation,
+                        recommendations=recommendations,
+                        processing_time_ms=processing_time_ms,
+                        context=context
+                    )
+                    logger.debug(f"Decision logged with ID: {decision_id}")
+                except Exception as e:
+                    logger.error(f"Error logging decision: {e}")
+            
+            # Log prediction for monitoring
+            if self.model_monitor:
+                try:
+                    # Create DataFrame for monitoring
+                    monitoring_df = transaction_df.copy()
+                    
+                    self.model_monitor.log_predictions(
+                        X_data=monitoring_df,
+                        y_pred=predictions,
+                        y_pred_proba=fraud_probabilities,
+                        prediction_metadata={
+                            'fraud_score': fraud_score,
+                            'processing_time_ms': processing_time_ms,
+                            'context': context
+                        }
+                    )
+                except Exception as e:
+                    logger.error(f"Error logging prediction for monitoring: {e}")
             
             # Check for alert conditions if AlertManager is available
             if self.alert_manager and fraud_score >= self.risk_threshold:
                 try:
-                    # Get detailed explanation for alert
-                    explanation_data = self.get_fraud_explanation(transaction)
-                    
                     # Create alert if conditions are met
                     alert = self.alert_manager.check_alert_conditions(
                         fraud_score=fraud_score,
                         transaction_data=transaction,
-                        risk_factors=explanation_data.get('risk_factors', {}),
-                        explanation=explanation_data.get('explanation_text', ''),
-                        recommendations=explanation_data.get('recommendations', [])
+                        risk_factors=risk_factors or {},
+                        explanation=explanation or '',
+                        recommendations=recommendations or []
                     )
                     
                     if alert:
@@ -143,12 +218,13 @@ class FraudDetector:
             logger.error(f"Error scoring transaction: {e}")
             raise ValueError(f"Failed to score transaction: {e}")
     
-    def batch_predict(self, transactions: pd.DataFrame) -> pd.DataFrame:
+    def batch_predict(self, transactions: pd.DataFrame, data_source: Optional[str] = None) -> pd.DataFrame:
         """
         Perform batch prediction on multiple transactions.
         
         Args:
             transactions: DataFrame containing multiple transactions
+            data_source: Source identifier for the batch data
             
         Returns:
             DataFrame with original data plus fraud scores and predictions
@@ -160,6 +236,7 @@ class FraudDetector:
             logger.warning("Empty DataFrame provided for batch prediction")
             return transactions.copy()
         
+        start_time = datetime.now()
         logger.info(f"Processing batch prediction for {len(transactions)} transactions")
         
         # Prepare data for model
@@ -185,6 +262,44 @@ class FraudDetector:
             # Add batch processing timestamp
             result_df['processed_at'] = datetime.now().isoformat()
             
+            # Calculate processing time
+            processing_time_ms = (datetime.now() - start_time).total_seconds() * 1000
+            
+            # Log batch predictions for monitoring
+            if self.model_monitor:
+                try:
+                    self.model_monitor.log_predictions(
+                        X_data=prepared_data,
+                        y_pred=predictions,
+                        y_pred_proba=probabilities,
+                        prediction_metadata={
+                            'batch_size': len(transactions),
+                            'processing_time_ms': processing_time_ms,
+                            'data_source': data_source
+                        }
+                    )
+                except Exception as e:
+                    logger.error(f"Error logging batch predictions for monitoring: {e}")
+            
+            # Log batch decisions
+            if self.decision_logger:
+                try:
+                    model_info = {
+                        'name': getattr(self.model, 'model_name', 'unknown'),
+                        'version': getattr(self.model, 'model_version', 'unknown'),
+                        'threshold': self.risk_threshold
+                    }
+                    
+                    batch_id = self.decision_logger.log_batch_decisions(
+                        batch_results=result_df,
+                        model_info=model_info,
+                        processing_time_ms=processing_time_ms,
+                        data_source=data_source
+                    )
+                    logger.debug(f"Batch decisions logged with ID: {batch_id}")
+                except Exception as e:
+                    logger.error(f"Error logging batch decisions: {e}")
+            
             logger.info(f"Batch prediction completed. Found {sum(predictions)} potential fraud cases")
             
             return result_df
@@ -193,12 +308,13 @@ class FraudDetector:
             logger.error(f"Error in batch prediction: {e}")
             raise ValueError(f"Failed to process batch prediction: {e}")
     
-    def get_fraud_explanation(self, transaction: Dict[str, Any]) -> Dict[str, Any]:
+    def get_fraud_explanation(self, transaction: Dict[str, Any], fraud_score: Optional[float] = None) -> Dict[str, Any]:
         """
         Generate detailed fraud explanation and risk factor identification.
         
         Args:
             transaction: Dictionary containing transaction data
+            fraud_score: Pre-calculated fraud score (to avoid circular dependency)
             
         Returns:
             Dictionary containing fraud explanation and risk factors
@@ -206,8 +322,19 @@ class FraudDetector:
         if not self.enable_explanations:
             return {"explanation": "Fraud explanations are disabled"}
         
-        # Get fraud score
-        fraud_score = self.score_transaction(transaction)
+        # Get fraud score if not provided
+        if fraud_score is None:
+            # Calculate fraud score without explanations to avoid recursion
+            if self.model is None:
+                raise ValueError("No model loaded for fraud detection")
+            
+            transaction_df = self._prepare_transaction_data([transaction])
+            fraud_probabilities = self.model.predict_proba(transaction_df)
+            
+            if fraud_probabilities.ndim == 1:
+                fraud_score = fraud_probabilities[0]
+            else:
+                fraud_score = fraud_probabilities[0, 1]
         
         # Analyze risk factors
         risk_factors = self._analyze_transaction_risk_factors(transaction)
@@ -663,3 +790,137 @@ class FraudDetector:
         if self.alert_manager:
             return self.alert_manager.get_alert_statistics()
         return None
+    
+    def set_reference_data_for_monitoring(self, X_reference: pd.DataFrame, y_reference: pd.Series) -> None:
+        """
+        Set reference data for drift detection monitoring.
+        
+        Args:
+            X_reference: Reference feature data (typically training data)
+            y_reference: Reference labels
+        """
+        if self.model_monitor:
+            self.model_monitor.set_reference_data(X_reference, y_reference)
+            logger.info("Reference data set for monitoring")
+        else:
+            logger.warning("Model monitoring is not enabled")
+    
+    def get_monitoring_summary(self) -> Optional[Dict[str, Any]]:
+        """
+        Get monitoring summary from the ModelMonitor.
+        
+        Returns:
+            Monitoring summary dictionary or None if monitoring not enabled
+        """
+        if self.model_monitor:
+            return self.model_monitor.get_monitoring_summary()
+        return None
+    
+    def get_performance_trend(self, days: int = 7) -> Optional[Dict[str, Any]]:
+        """
+        Get performance trend data for visualization.
+        
+        Args:
+            days: Number of days to include in trend
+            
+        Returns:
+            Performance trend data or None if monitoring not enabled
+        """
+        if self.model_monitor:
+            return self.model_monitor.get_performance_trend_data(days)
+        return None
+    
+    def get_drift_summary(self, days: int = 7) -> Optional[Dict[str, Any]]:
+        """
+        Get drift detection summary.
+        
+        Args:
+            days: Number of days to include in summary
+            
+        Returns:
+            Drift summary data or None if monitoring not enabled
+        """
+        if self.model_monitor:
+            return self.model_monitor.get_drift_summary(days)
+        return None
+    
+    def get_decision_statistics(self, hours: int = 24) -> Optional[Dict[str, Any]]:
+        """
+        Get decision statistics from the DecisionLogger.
+        
+        Args:
+            hours: Number of hours to look back
+            
+        Returns:
+            Decision statistics or None if logging not enabled
+        """
+        if self.decision_logger:
+            return self.decision_logger.get_decision_statistics(hours)
+        return None
+    
+    def get_model_performance_feedback(self, days: int = 7) -> Optional[Dict[str, Any]]:
+        """
+        Get model performance feedback based on actual outcomes.
+        
+        Args:
+            days: Number of days to look back
+            
+        Returns:
+            Performance feedback data or None if logging not enabled
+        """
+        if self.decision_logger:
+            return self.decision_logger.get_model_performance_feedback(days)
+        return None
+    
+    def update_decision_outcome(self, 
+                              decision_id: str, 
+                              actual_outcome: int,
+                              investigation_notes: Optional[str] = None,
+                              action_taken: Optional[str] = None) -> bool:
+        """
+        Update a decision with actual outcome information.
+        
+        Args:
+            decision_id: ID of the decision to update
+            actual_outcome: Actual fraud outcome (0 or 1)
+            investigation_notes: Notes from investigation
+            action_taken: Action taken based on the decision
+            
+        Returns:
+            True if update was successful, False otherwise
+        """
+        if self.decision_logger:
+            return self.decision_logger.update_decision_outcome(
+                decision_id, actual_outcome, investigation_notes, action_taken
+            )
+        return False
+    
+    def export_monitoring_report(self, output_path: str, days: int = 30) -> None:
+        """
+        Export comprehensive monitoring report.
+        
+        Args:
+            output_path: Path to save the report
+            days: Number of days to include in report
+        """
+        if self.model_monitor:
+            self.model_monitor.export_monitoring_report(output_path, days)
+        else:
+            logger.warning("Model monitoring is not enabled")
+    
+    def export_decisions_for_analysis(self, 
+                                    output_path: str,
+                                    days: int = 30,
+                                    include_outcomes: bool = True) -> None:
+        """
+        Export decision data for external analysis.
+        
+        Args:
+            output_path: Path to save the exported data
+            days: Number of days to include
+            include_outcomes: Whether to include actual outcomes
+        """
+        if self.decision_logger:
+            self.decision_logger.export_decisions_for_analysis(output_path, days, include_outcomes)
+        else:
+            logger.warning("Decision logging is not enabled")
