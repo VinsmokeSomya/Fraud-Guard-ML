@@ -213,47 +213,47 @@ class FraudDetector:
                         increment_counter("decision_logging_errors", 1)
                 
                 # Log prediction for monitoring
-            if self.model_monitor:
-                try:
-                    # Create DataFrame for monitoring
-                    monitoring_df = transaction_df.copy()
-                    
-                    self.model_monitor.log_predictions(
-                        X_data=monitoring_df,
-                        y_pred=predictions,
-                        y_pred_proba=fraud_probabilities,
-                        prediction_metadata={
-                            'fraud_score': fraud_score,
-                            'processing_time_ms': processing_time_ms,
-                            'context': context
-                        }
-                    )
-                except Exception as e:
-                    logger.error(f"Error logging prediction for monitoring: {e}")
-            
-            # Check for alert conditions if AlertManager is available
-            if self.alert_manager and fraud_score >= self.risk_threshold:
-                try:
-                    # Create alert if conditions are met
-                    alert = self.alert_manager.check_alert_conditions(
-                        fraud_score=fraud_score,
-                        transaction_data=transaction,
-                        risk_factors=risk_factors or {},
-                        explanation=explanation or '',
-                        recommendations=recommendations or []
-                    )
-                    
-                    if alert:
-                        logger.info(f"Alert created for transaction: {alert.alert_id}")
+                if self.model_monitor:
+                    try:
+                        # Create DataFrame for monitoring
+                        monitoring_df = transaction_df.copy()
                         
-                except Exception as e:
-                    logger.error(f"Error creating alert for transaction: {e}")
-            
-            return float(fraud_score)
-            
-        except Exception as e:
-            logger.error(f"Error scoring transaction: {e}")
-            raise ValueError(f"Failed to score transaction: {e}")
+                        self.model_monitor.log_predictions(
+                            X_data=monitoring_df,
+                            y_pred=predictions,
+                            y_pred_proba=fraud_probabilities,
+                            prediction_metadata={
+                                'fraud_score': fraud_score,
+                                'processing_time_ms': processing_time_ms,
+                                'context': context
+                            }
+                        )
+                    except Exception as e:
+                        logger.error(f"Error logging prediction for monitoring: {e}")
+                
+                # Check for alert conditions if AlertManager is available
+                if self.alert_manager and fraud_score >= self.risk_threshold:
+                    try:
+                        # Create alert if conditions are met
+                        alert = self.alert_manager.check_alert_conditions(
+                            fraud_score=fraud_score,
+                            transaction_data=transaction,
+                            risk_factors=risk_factors or {},
+                            explanation=explanation or '',
+                            recommendations=recommendations or []
+                        )
+                        
+                        if alert:
+                            logger.info(f"Alert created for transaction: {alert.alert_id}")
+                            
+                    except Exception as e:
+                        logger.error(f"Error creating alert for transaction: {e}")
+                
+                return float(fraud_score)
+                
+            except Exception as e:
+                logger.error(f"Error scoring transaction: {e}")
+                raise ValueError(f"Failed to score transaction: {e}")
     
     def batch_predict(self, transactions: pd.DataFrame, data_source: Optional[str] = None) -> pd.DataFrame:
         """
